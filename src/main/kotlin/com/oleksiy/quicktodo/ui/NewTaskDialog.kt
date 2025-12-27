@@ -1,6 +1,6 @@
-package com.example.quicktodo.ui
+package com.oleksiy.quicktodo.ui
 
-import com.example.quicktodo.model.Priority
+import com.oleksiy.quicktodo.model.Priority
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBTextField
@@ -13,13 +13,13 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JToggleButton
 
-class NewTaskDialog(project: Project) : DialogWrapper(project) {
+class NewTaskDialog(project: Project, dialogTitle: String = "New Task") : DialogWrapper(project) {
     private val nameField = JBTextField()
     private var selectedPriority = Priority.NONE
     private val priorityButtons = mutableMapOf<Priority, JToggleButton>()
 
     init {
-        title = "New Task"
+        title = dialogTitle
         init()
     }
 

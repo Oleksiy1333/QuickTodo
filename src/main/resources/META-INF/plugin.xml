@@ -1,14 +1,14 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
-    <id>com.example.quicktodo</id>
+    <id>com.oleksiy.quicktodo</id>
 
     <!-- Public plugin name should be written in Title Case.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
     <name>QuickTodo</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <vendor url="https://github.com/Oleksiy1333">Oleksiy</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
@@ -34,21 +34,21 @@
         <toolWindow id="QuickTodo"
                     anchor="right"
                     icon="/icons/checklist.svg"
-                    factoryClass="com.example.quicktodo.ui.ChecklistToolWindowFactory"/>
+                    factoryClass="com.oleksiy.quicktodo.ui.ChecklistToolWindowFactory"/>
 
-        <projectService serviceImplementation="com.example.quicktodo.service.TaskService"/>
+        <projectService serviceImplementation="com.oleksiy.quicktodo.service.TaskService"/>
     </extensions>
 
     <actions>
-        <action id="com.example.quicktodo.ShowChecklist"
-                class="com.example.quicktodo.action.ShowChecklistAction"
+        <action id="com.oleksiy.quicktodo.ShowChecklist"
+                class="com.oleksiy.quicktodo.action.ShowChecklistAction"
                 text="Show QuickTodo"
                 description="Open QuickTodo tool window">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt C"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
-        <action id="com.example.quicktodo.AddTask"
-                class="com.example.quicktodo.action.AddTaskAction"
+        <action id="com.oleksiy.quicktodo.AddTask"
+                class="com.oleksiy.quicktodo.action.AddTaskAction"
                 text="Add Task"
                 description="Add a new task to QuickTodo">
             <keyboard-shortcut keymap="$default" first-keystroke="meta shift T"/>

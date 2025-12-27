@@ -1,4 +1,4 @@
-package com.example.quicktodo.model
+package com.oleksiy.quicktodo.model
 
 enum class Priority(val displayName: String) {
     NONE("None"),

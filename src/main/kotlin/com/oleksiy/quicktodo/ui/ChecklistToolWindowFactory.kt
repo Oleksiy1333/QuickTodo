@@ -1,4 +1,4 @@
-package com.example.quicktodo.ui
+package com.oleksiy.quicktodo.ui
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow

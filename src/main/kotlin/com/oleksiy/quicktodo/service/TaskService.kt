@@ -1,7 +1,7 @@
-package com.example.quicktodo.service
+package com.oleksiy.quicktodo.service
 
-import com.example.quicktodo.model.Priority
-import com.example.quicktodo.model.Task
+import com.oleksiy.quicktodo.model.Priority
+import com.oleksiy.quicktodo.model.Task
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -11,7 +11,7 @@ import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.util.xmlb.annotations.XCollection
 
 @State(
-    name = "com.example.quicktodo.TaskService",
+    name = "com.oleksiy.quicktodo.TaskService",
     storages = [Storage("quicktodo.tasklist.xml")]
 )
 @Service(Service.Level.PROJECT)
@@ -58,10 +58,10 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         return task
     }
 
-    fun addSubtask(parentId: String, text: String): Task? {
+    fun addSubtask(parentId: String, text: String, priority: Priority = Priority.NONE): Task? {
         val parent = findTask(parentId) ?: return null
         if (!parent.canAddSubtask()) return null
-        val subtask = parent.addSubtask(text)
+        val subtask = parent.addSubtask(text, priority)
         notifyListeners()
         return subtask
     }

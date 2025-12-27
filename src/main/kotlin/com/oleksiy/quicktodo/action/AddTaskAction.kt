@@ -1,7 +1,7 @@
-package com.example.quicktodo.action
+package com.oleksiy.quicktodo.action
 
-import com.example.quicktodo.service.TaskService
-import com.example.quicktodo.ui.NewTaskDialog
+import com.oleksiy.quicktodo.service.TaskService
+import com.oleksiy.quicktodo.ui.NewTaskDialog
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 

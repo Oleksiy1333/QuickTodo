@@ -1,7 +1,7 @@
-package com.example.quicktodo.ui
+package com.oleksiy.quicktodo.ui
 
-import com.example.quicktodo.model.Priority
-import com.example.quicktodo.model.Task
+import com.oleksiy.quicktodo.model.Priority
+import com.oleksiy.quicktodo.model.Task
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.SimpleTextAttributes

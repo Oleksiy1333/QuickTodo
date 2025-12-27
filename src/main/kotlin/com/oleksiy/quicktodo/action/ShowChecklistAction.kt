@@ -1,4 +1,4 @@
-package com.example.quicktodo.action
+package com.oleksiy.quicktodo.action
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent

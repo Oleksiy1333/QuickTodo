@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
@@ -35,6 +37,12 @@ intellijPlatform {
         changeNotes = """
             Initial version
         """.trimIndent()
+    }
+
+    pluginVerification {
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.4.1")
+        }
     }
 }
 

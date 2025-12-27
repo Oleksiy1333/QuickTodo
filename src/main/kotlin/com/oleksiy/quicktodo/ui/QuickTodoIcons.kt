@@ -1,6 +1,6 @@
-package com.example.quicktodo.ui
+package com.oleksiy.quicktodo.ui
 
-import com.example.quicktodo.model.Priority
+import com.oleksiy.quicktodo.model.Priority
 import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon
 

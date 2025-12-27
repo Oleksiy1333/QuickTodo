@@ -1,8 +1,8 @@
-package com.example.quicktodo.ui
+package com.oleksiy.quicktodo.ui
 
-import com.example.quicktodo.model.Priority
-import com.example.quicktodo.model.Task
-import com.example.quicktodo.service.TaskService
+import com.oleksiy.quicktodo.model.Priority
+import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.service.TaskService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
@@ -13,6 +13,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.Toggleable
 import com.intellij.ui.CheckboxTree
+import com.intellij.ui.CheckboxTreeBase
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.util.ui.JBUI
@@ -164,7 +165,7 @@ class ChecklistPanel(private val project: Project) {
     private fun createCheckboxTree(): CheckboxTree {
         val renderer = TaskTreeCellRenderer()
 
-        val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks")) {
+        val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks"), CheckboxTreeBase.CheckPolicy(false, false, false, false)) {
             override fun onNodeStateChanged(node: CheckedTreeNode) {
                 val task = node.userObject as? Task ?: return
                 taskService.setTaskCompletion(task.id, node.isChecked)
@@ -748,18 +749,17 @@ class ChecklistPanel(private val project: Project) {
             return
         }
 
-        val text = Messages.showInputDialog(
-            project,
-            "Enter subtask description:",
-            "New Subtask",
-            null
-        )
-        if (!text.isNullOrBlank()) {
-            // Ensure parent will be expanded to show the new subtask
-            ensureTaskExpanded(selectedTask.id)
-            val subtask = taskService.addSubtask(selectedTask.id, text)
-            if (subtask != null) {
-                selectTaskById(subtask.id)
+        val dialog = NewTaskDialog(project, "New Subtask")
+        if (dialog.showAndGet()) {
+            val text = dialog.getTaskText()
+            val priority = dialog.getSelectedPriority()
+            if (text.isNotBlank()) {
+                // Ensure parent will be expanded to show the new subtask
+                ensureTaskExpanded(selectedTask.id)
+                val subtask = taskService.addSubtask(selectedTask.id, text, priority)
+                if (subtask != null) {
+                    selectTaskById(subtask.id)
+                }
             }
         }
     }

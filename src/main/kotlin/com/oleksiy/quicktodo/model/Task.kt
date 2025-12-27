@@ -1,4 +1,4 @@
-package com.example.quicktodo.model
+package com.oleksiy.quicktodo.model
 
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.Tag
@@ -35,11 +35,12 @@ data class Task(
 
     fun canAddSubtask(): Boolean = level < 2
 
-    fun addSubtask(text: String): Task {
+    fun addSubtask(text: String, priority: Priority = Priority.NONE): Task {
         require(canAddSubtask()) { "Maximum nesting level reached" }
         val subtask = Task(
             text = text,
-            level = level + 1
+            level = level + 1,
+            priority = priority.name
         )
         subtasks.add(subtask)
         return subtask
