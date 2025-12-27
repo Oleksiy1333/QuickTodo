@@ -7,13 +7,11 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.Toggleable
-import com.intellij.ui.AnActionButton
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.ToolbarDecorator
@@ -74,35 +72,43 @@ class ChecklistPanel(private val project: Project) {
                 val selectedNode = tree.lastSelectedPathComponent as? CheckedTreeNode
                 selectedNode?.userObject is Task
             }
-            .addExtraAction(object : AnActionButton("Add Subtask", AllIcons.General.Add) {
-                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
-                    addSubtask()
-                }
+            .addExtraActions(
+                object : AnAction("Add Subtask", "Add a subtask to selected task", AllIcons.General.Add) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        addSubtask()
+                    }
 
-                override fun isEnabled(): Boolean {
-                    val selectedNode = tree.lastSelectedPathComponent as? CheckedTreeNode ?: return false
-                    val selectedTask = selectedNode.userObject as? Task ?: return false
-                    return selectedTask.canAddSubtask()
-                }
-            })
-            .addExtraAction(object : AnActionButton("Move Up", AllIcons.Actions.MoveUp) {
-                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
-                    moveSelectedTask(-1)
-                }
+                    override fun update(e: AnActionEvent) {
+                        val selectedNode = tree.lastSelectedPathComponent as? CheckedTreeNode
+                        val selectedTask = selectedNode?.userObject as? Task
+                        e.presentation.isEnabled = selectedTask?.canAddSubtask() == true
+                    }
 
-                override fun isEnabled(): Boolean {
-                    return canMoveSelectedTask(-1)
-                }
-            })
-            .addExtraAction(object : AnActionButton("Move Down", AllIcons.Actions.MoveDown) {
-                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
-                    moveSelectedTask(1)
-                }
+                    override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+                },
+                object : AnAction("Move Up", "Move selected task up", AllIcons.Actions.MoveUp) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        moveSelectedTask(-1)
+                    }
 
-                override fun isEnabled(): Boolean {
-                    return canMoveSelectedTask(1)
+                    override fun update(e: AnActionEvent) {
+                        e.presentation.isEnabled = canMoveSelectedTask(-1)
+                    }
+
+                    override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+                },
+                object : AnAction("Move Down", "Move selected task down", AllIcons.Actions.MoveDown) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        moveSelectedTask(1)
+                    }
+
+                    override fun update(e: AnActionEvent) {
+                        e.presentation.isEnabled = canMoveSelectedTask(1)
+                    }
+
+                    override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
                 }
-            })
+            )
 
         val decoratorPanel = toolbarDecorator.createPanel()
 
@@ -127,6 +133,8 @@ class ChecklistPanel(private val project: Project) {
             override fun update(e: AnActionEvent) {
                 e.presentation.isEnabled = hasCompletedTasks()
             }
+
+            override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
         }
         val rightActionGroup = DefaultActionGroup(expandAllAction, collapseAllAction, clearCompletedAction)
         val rightToolbar = ActionManager.getInstance().createActionToolbar("ChecklistRightToolbar", rightActionGroup, true)
@@ -204,7 +212,7 @@ class ChecklistPanel(private val project: Project) {
                             6, 6
                         )
                     }
-                    DropPosition.NONE -> {}
+                    DropPosition.NONE -> Unit // No indicator to paint when drop is not valid
                 }
             }
         }
@@ -222,9 +230,7 @@ class ChecklistPanel(private val project: Project) {
                     val rowBounds = checkboxTree.getRowBounds(row) ?: return
 
                     // Checkbox rectangle is ~16px, check if click is outside it
-                    val checkboxStart = rowBounds.x
-                    val checkboxEnd = rowBounds.x + 16
-                    val clickedOnCheckbox = e.x >= checkboxStart && e.x <= checkboxEnd
+                    val clickedOnCheckbox = e.x in rowBounds.x..(rowBounds.x + 16)
 
                     if (!clickedOnCheckbox) {
                         editTask(task)
@@ -277,29 +283,28 @@ class ChecklistPanel(private val project: Project) {
     }
 
     private fun setupDragAndDrop(tree: CheckboxTree) {
+        setupDragSource(tree)
+        setupDropTarget(tree)
+    }
+
+    private fun setupDragSource(tree: CheckboxTree) {
         val dragSource = DragSource.getDefaultDragSource()
+        dragSource.createDefaultDragGestureRecognizer(tree, DnDConstants.ACTION_MOVE) { dge ->
+            val path = tree.getPathForLocation(dge.dragOrigin.x, dge.dragOrigin.y) ?: return@createDefaultDragGestureRecognizer
+            val node = path.lastPathComponent as? CheckedTreeNode ?: return@createDefaultDragGestureRecognizer
+            val task = node.userObject as? Task ?: return@createDefaultDragGestureRecognizer
 
-        dragSource.createDefaultDragGestureRecognizer(
-            tree,
-            DnDConstants.ACTION_MOVE,
-            object : DragGestureListener {
-                override fun dragGestureRecognized(dge: DragGestureEvent) {
-                    val path = tree.getPathForLocation(dge.dragOrigin.x, dge.dragOrigin.y) ?: return
-                    val node = path.lastPathComponent as? CheckedTreeNode ?: return
-                    val task = node.userObject as? Task ?: return
-
-                    draggedTask = task
-                    val transferable = TaskTransferable(task)
-                    try {
-                        dge.startDrag(DragSource.DefaultMoveDrop, transferable)
-                    } catch (e: InvalidDnDOperationException) {
-                        // Drag already in progress, ignore this gesture
-                        draggedTask = null
-                    }
-                }
+            draggedTask = task
+            try {
+                dge.startDrag(DragSource.DefaultMoveDrop, TaskTransferable(task))
+            } catch (_: InvalidDnDOperationException) {
+                // Drag already in progress, ignore this gesture
+                draggedTask = null
             }
-        )
+        }
+    }
 
+    private fun setupDropTarget(tree: CheckboxTree) {
         DropTarget(tree, DnDConstants.ACTION_MOVE, object : DropTargetListener {
             override fun dragEnter(dtde: DropTargetDragEvent) {
                 if (dtde.isDataFlavorSupported(TASK_DATA_FLAVOR)) {
@@ -310,146 +315,151 @@ class ChecklistPanel(private val project: Project) {
             }
 
             override fun dragOver(dtde: DropTargetDragEvent) {
-                val location = dtde.location
-                val path = tree.getPathForLocation(location.x, location.y)
-
-                if (path != null) {
-                    val targetRow = tree.getRowForPath(path)
-                    val rowBounds = tree.getRowBounds(targetRow)
-
-                    if (rowBounds != null) {
-                        val dropY = location.y - rowBounds.y
-                        val rowHeight = rowBounds.height
-
-                        val targetNode = path.lastPathComponent as? CheckedTreeNode
-                        val targetTask = targetNode?.userObject as? Task
-                        val sourceTask = draggedTask
-
-                        // Determine drop position based on Y coordinate
-                        val newDropPosition = when {
-                            sourceTask != null && targetTask != null && isDescendant(sourceTask, targetTask) -> DropPosition.NONE
-                            dropY < rowHeight / 4 -> DropPosition.ABOVE
-                            dropY > rowHeight * 3 / 4 -> DropPosition.BELOW
-                            targetTask?.canAddSubtask() == true -> DropPosition.AS_CHILD
-                            else -> DropPosition.BELOW  // Fallback to below if can't add subtask
-                        }
-
-                        // Only repaint if position changed
-                        if (dropTargetRow != targetRow || dropPosition != newDropPosition) {
-                            dropTargetRow = targetRow
-                            dropPosition = newDropPosition
-                            tree.repaint()
-                        }
-                    }
-
-                    dtde.acceptDrag(DnDConstants.ACTION_MOVE)
-                } else {
-                    // Clear indicator when not over a valid target
-                    if (dropTargetRow != -1 || dropPosition != DropPosition.NONE) {
-                        dropTargetRow = -1
-                        dropPosition = DropPosition.NONE
-                        tree.repaint()
-                    }
-                    dtde.acceptDrag(DnDConstants.ACTION_MOVE)
-                }
+                handleDragOver(tree, dtde)
             }
 
-            override fun dropActionChanged(dtde: DropTargetDragEvent) {}
+            override fun dropActionChanged(dtde: DropTargetDragEvent) {
+                // Action change (e.g., Ctrl key modifier) not relevant for task reordering
+            }
 
             override fun dragExit(dte: DropTargetEvent) {
-                clearDropIndicator()
-            }
-
-            private fun clearDropIndicator() {
-                if (dropTargetRow != -1 || dropPosition != DropPosition.NONE) {
-                    dropTargetRow = -1
-                    dropPosition = DropPosition.NONE
-                    tree.repaint()
-                }
+                clearDropIndicator(tree)
             }
 
             override fun drop(dtde: DropTargetDropEvent) {
-                val sourceTask = draggedTask ?: run {
-                    clearDropIndicator()
-                    dtde.rejectDrop()
-                    return
-                }
-
-                val location = dtde.location
-                val targetPath = tree.getPathForLocation(location.x, location.y)
-
-                dtde.acceptDrop(DnDConstants.ACTION_MOVE)
-
-                if (targetPath == null || targetPath.pathCount <= 1) {
-                    // Drop at root level
-                    val dropRow = tree.getRowForLocation(location.x, location.y)
-                    val targetIndex = if (dropRow >= 0) {
-                        // Calculate index based on drop position
-                        val rootTasks = taskService.getTasks()
-                        var idx = 0
-                        for (i in rootTasks.indices) {
-                            val taskNode = (tree.model.root as CheckedTreeNode).getChildAt(i)
-                            val nodeRow = tree.getRowForPath(TreePath(arrayOf(tree.model.root, taskNode)))
-                            if (nodeRow >= dropRow) break
-                            idx = i + 1
-                        }
-                        idx
-                    } else {
-                        taskService.getTasks().size
-                    }
-                    taskService.moveTask(sourceTask.id, null, targetIndex)
-                } else {
-                    val targetNode = targetPath.lastPathComponent as? CheckedTreeNode
-                    val targetTask = targetNode?.userObject as? Task
-
-                    if (targetTask != null && targetTask.id != sourceTask.id) {
-                        // Check if dropping onto itself or its descendant
-                        if (!isDescendant(sourceTask, targetTask)) {
-                            // Get drop position info
-                            val targetRow = tree.getRowForPath(targetPath)
-                            val rowBounds = tree.getRowBounds(targetRow)
-                            val dropY = location.y - rowBounds.y
-                            val rowHeight = rowBounds.height
-
-                            val movedTaskId = sourceTask.id
-                            when {
-                                dropY < rowHeight / 4 -> {
-                                    // Drop above target (as sibling before)
-                                    val parentPath = targetPath.parentPath
-                                    val parentNode = parentPath?.lastPathComponent as? CheckedTreeNode
-                                    val parentTask = parentNode?.userObject as? Task
-                                    val targetIndex = getTaskIndex(targetTask, parentTask)
-                                    taskService.moveTask(sourceTask.id, parentTask?.id, targetIndex)
-                                    selectTaskById(movedTaskId)
-                                }
-                                dropY > rowHeight * 3 / 4 -> {
-                                    // Drop below target (as sibling after)
-                                    val parentPath = targetPath.parentPath
-                                    val parentNode = parentPath?.lastPathComponent as? CheckedTreeNode
-                                    val parentTask = parentNode?.userObject as? Task
-                                    val targetIndex = getTaskIndex(targetTask, parentTask) + 1
-                                    taskService.moveTask(sourceTask.id, parentTask?.id, targetIndex)
-                                    selectTaskById(movedTaskId)
-                                }
-                                else -> {
-                                    // Drop as child of target
-                                    if (targetTask.canAddSubtask()) {
-                                        taskService.moveTask(sourceTask.id, targetTask.id, 0)
-                                        // Expand parent and select the dropped task
-                                        ensureTaskExpanded(targetTask.id)
-                                        selectTaskById(movedTaskId)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                draggedTask = null
-                clearDropIndicator()
-                dtde.dropComplete(true)
+                handleDrop(tree, dtde)
             }
         })
+    }
+
+    private fun handleDragOver(tree: CheckboxTree, dtde: DropTargetDragEvent) {
+        val location = dtde.location
+        val path = tree.getPathForLocation(location.x, location.y)
+
+        if (path == null) {
+            clearDropIndicator(tree)
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
+
+        val targetRow = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(targetRow)
+        if (rowBounds == null) {
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
+
+        val newDropPosition = calculateDropPosition(path, location.y - rowBounds.y, rowBounds.height)
+        updateDropIndicator(tree, targetRow, newDropPosition)
+        dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+    }
+
+    private fun calculateDropPosition(path: TreePath, dropY: Int, rowHeight: Int): DropPosition {
+        val targetNode = path.lastPathComponent as? CheckedTreeNode
+        val targetTask = targetNode?.userObject as? Task
+        val sourceTask = draggedTask
+
+        return when {
+            sourceTask != null && targetTask != null && isDescendant(sourceTask, targetTask) -> DropPosition.NONE
+            dropY < rowHeight / 4 -> DropPosition.ABOVE
+            dropY > rowHeight * 3 / 4 -> DropPosition.BELOW
+            targetTask?.canAddSubtask() == true -> DropPosition.AS_CHILD
+            else -> DropPosition.BELOW
+        }
+    }
+
+    private fun updateDropIndicator(tree: CheckboxTree, targetRow: Int, newPosition: DropPosition) {
+        if (dropTargetRow != targetRow || dropPosition != newPosition) {
+            dropTargetRow = targetRow
+            dropPosition = newPosition
+            tree.repaint()
+        }
+    }
+
+    private fun clearDropIndicator(tree: CheckboxTree) {
+        if (dropTargetRow != -1 || dropPosition != DropPosition.NONE) {
+            dropTargetRow = -1
+            dropPosition = DropPosition.NONE
+            tree.repaint()
+        }
+    }
+
+    private fun handleDrop(tree: CheckboxTree, dtde: DropTargetDropEvent) {
+        val sourceTask = draggedTask ?: run {
+            clearDropIndicator(tree)
+            dtde.rejectDrop()
+            return
+        }
+
+        dtde.acceptDrop(DnDConstants.ACTION_MOVE)
+
+        val location = dtde.location
+        val targetPath = tree.getPathForLocation(location.x, location.y)
+
+        if (targetPath == null || targetPath.pathCount <= 1) {
+            handleDropAtRoot(tree, sourceTask, location.x, location.y)
+        } else {
+            handleDropOnTask(tree, sourceTask, targetPath, location.y)
+        }
+
+        draggedTask = null
+        clearDropIndicator(tree)
+        dtde.dropComplete(true)
+    }
+
+    private fun handleDropAtRoot(tree: CheckboxTree, sourceTask: Task, x: Int, y: Int) {
+        val dropRow = tree.getRowForLocation(x, y)
+        val targetIndex = calculateRootDropIndex(tree, dropRow)
+        taskService.moveTask(sourceTask.id, null, targetIndex)
+    }
+
+    private fun calculateRootDropIndex(tree: CheckboxTree, dropRow: Int): Int {
+        if (dropRow < 0) return taskService.getTasks().size
+
+        val rootTasks = taskService.getTasks()
+        for (i in rootTasks.indices) {
+            val taskNode = (tree.model.root as CheckedTreeNode).getChildAt(i)
+            val nodeRow = tree.getRowForPath(TreePath(arrayOf(tree.model.root, taskNode)))
+            if (nodeRow >= dropRow) return i
+        }
+        return rootTasks.size
+    }
+
+    private fun handleDropOnTask(tree: CheckboxTree, sourceTask: Task, targetPath: TreePath, locationY: Int) {
+        val targetNode = targetPath.lastPathComponent as? CheckedTreeNode ?: return
+        val targetTask = targetNode.userObject as? Task ?: return
+
+        if (targetTask.id == sourceTask.id || isDescendant(sourceTask, targetTask)) return
+
+        val targetRow = tree.getRowForPath(targetPath)
+        val rowBounds = tree.getRowBounds(targetRow) ?: return
+        val dropY = locationY - rowBounds.y
+        val rowHeight = rowBounds.height
+
+        when {
+            dropY < rowHeight / 4 -> moveTaskAsSibling(sourceTask, targetTask, targetPath, 0)
+            dropY > rowHeight * 3 / 4 -> moveTaskAsSibling(sourceTask, targetTask, targetPath, 1)
+            targetTask.canAddSubtask() -> moveTaskAsChild(sourceTask, targetTask)
+        }
+    }
+
+    private fun moveTaskAsSibling(sourceTask: Task, targetTask: Task, targetPath: TreePath, indexOffset: Int) {
+        val parentTask = getParentTaskFromPath(targetPath)
+        val targetIndex = getTaskIndex(targetTask, parentTask) + indexOffset
+        taskService.moveTask(sourceTask.id, parentTask?.id, targetIndex)
+        selectTaskById(sourceTask.id)
+    }
+
+    private fun moveTaskAsChild(sourceTask: Task, targetTask: Task) {
+        taskService.moveTask(sourceTask.id, targetTask.id, 0)
+        ensureTaskExpanded(targetTask.id)
+        selectTaskById(sourceTask.id)
+    }
+
+    private fun getParentTaskFromPath(path: TreePath): Task? {
+        val parentPath = path.parentPath ?: return null
+        val parentNode = parentPath.lastPathComponent as? CheckedTreeNode ?: return null
+        return parentNode.userObject as? Task
     }
 
     private fun isDescendant(parent: Task, potentialChild: Task): Boolean {
@@ -461,11 +471,7 @@ class ChecklistPanel(private val project: Project) {
     }
 
     private fun getTaskIndex(task: Task, parent: Task?): Int {
-        val siblings = if (parent == null) {
-            taskService.getTasks()
-        } else {
-            parent.subtasks
-        }
+        val siblings = parent?.subtasks ?: taskService.getTasks()
         return siblings.indexOfFirst { it.id == task.id }.coerceAtLeast(0)
     }
 
@@ -475,11 +481,7 @@ class ChecklistPanel(private val project: Project) {
         val parentNode = selectedNode.parent as? CheckedTreeNode ?: return false
         val parentTask = parentNode.userObject as? Task
 
-        val siblings = if (parentTask == null) {
-            taskService.getTasks()
-        } else {
-            parentTask.subtasks
-        }
+        val siblings = parentTask?.subtasks ?: taskService.getTasks()
 
         val currentIndex = siblings.indexOfFirst { it.id == selectedTask.id }
         if (currentIndex < 0) return false
@@ -494,11 +496,7 @@ class ChecklistPanel(private val project: Project) {
         val parentNode = selectedNode.parent as? CheckedTreeNode ?: return
         val parentTask = parentNode.userObject as? Task
 
-        val siblings = if (parentTask == null) {
-            taskService.getTasks()
-        } else {
-            parentTask.subtasks
-        }
+        val siblings = parentTask?.subtasks ?: taskService.getTasks()
 
         val currentIndex = siblings.indexOfFirst { it.id == selectedTask.id }
         if (currentIndex < 0) return
@@ -570,6 +568,8 @@ class ChecklistPanel(private val project: Project) {
                     val isSelected = task.getPriorityEnum() == priority
                     Toggleable.setSelected(e.presentation, isSelected)
                 }
+
+                override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
             }
             priorityGroup.add(action)
         }
