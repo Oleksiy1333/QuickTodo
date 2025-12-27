@@ -67,38 +67,13 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     }
 
     fun removeTask(taskId: String): Boolean {
-        // Check root level tasks
-        for (i in myState.tasks.indices) {
-            val task = myState.tasks[i]
-            if (task.id == taskId) {
-                undoStack.addLast(RemovedTaskInfo(task, null, i))
-                myState.tasks.removeAt(i)
-                notifyListeners()
-                return true
-            }
-            val result = removeSubtaskWithUndo(task, taskId)
-            if (result != null) {
-                undoStack.addLast(result)
-                notifyListeners()
-                return true
-            }
+        val result = findAndRemoveTask(myState.tasks, taskId, null, captureInfo = true)
+        if (result != null) {
+            undoStack.addLast(result)
+            notifyListeners()
+            return true
         }
         return false
-    }
-
-    private fun removeSubtaskWithUndo(parent: Task, taskId: String): RemovedTaskInfo? {
-        for (i in parent.subtasks.indices) {
-            val subtask = parent.subtasks[i]
-            if (subtask.id == taskId) {
-                parent.subtasks.removeAt(i)
-                return RemovedTaskInfo(subtask, parent.id, i)
-            }
-            val result = removeSubtaskWithUndo(subtask, taskId)
-            if (result != null) {
-                return result
-            }
-        }
-        return null
     }
 
     fun undoRemoveTask(): Boolean {
@@ -125,8 +100,6 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         notifyListeners()
         return true
     }
-
-    fun canUndo(): Boolean = undoStack.isNotEmpty()
 
     fun setTaskCompletion(taskId: String, completed: Boolean): Boolean {
         val task = findTask(taskId) ?: return false
@@ -186,8 +159,8 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
         val task = findTask(taskId) ?: return false
 
-        // Remove task from its current location
-        if (!removeTaskWithoutNotify(taskId)) return false
+        // Remove task from its current location (without capturing undo info)
+        findAndRemoveTask(myState.tasks, taskId, null, captureInfo = false) ?: return false
 
         // Insert at new location
         if (targetParentId == null) {
@@ -217,34 +190,37 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         }
     }
 
-    private fun removeTaskWithoutNotify(taskId: String): Boolean {
-        val iterator = myState.tasks.iterator()
-        while (iterator.hasNext()) {
-            val task = iterator.next()
+    /**
+     * Generic tree traversal that finds and removes a task.
+     * @param tasks The list to search in
+     * @param taskId The ID of the task to find and remove
+     * @param parentId The ID of the parent (null for root level)
+     * @param captureInfo Whether to capture removal info for undo
+     * @return RemovedTaskInfo if found and removed (when captureInfo=true),
+     *         or a dummy RemovedTaskInfo (when captureInfo=false and found),
+     *         or null if not found
+     */
+    private fun findAndRemoveTask(
+        tasks: MutableList<Task>,
+        taskId: String,
+        parentId: String?,
+        captureInfo: Boolean
+    ): RemovedTaskInfo? {
+        for (i in tasks.indices) {
+            val task = tasks[i]
             if (task.id == taskId) {
-                iterator.remove()
-                return true
+                tasks.removeAt(i)
+                return if (captureInfo) {
+                    RemovedTaskInfo(task, parentId, i)
+                } else {
+                    // Return a dummy info to indicate success
+                    RemovedTaskInfo(task, null, 0)
+                }
             }
-            if (removeSubtaskWithoutNotify(task, taskId)) {
-                return true
-            }
+            val result = findAndRemoveTask(task.subtasks, taskId, task.id, captureInfo)
+            if (result != null) return result
         }
-        return false
-    }
-
-    private fun removeSubtaskWithoutNotify(parent: Task, taskId: String): Boolean {
-        val iterator = parent.subtasks.iterator()
-        while (iterator.hasNext()) {
-            val subtask = iterator.next()
-            if (subtask.id == taskId) {
-                iterator.remove()
-                return true
-            }
-            if (removeSubtaskWithoutNotify(subtask, taskId)) {
-                return true
-            }
-        }
-        return false
+        return null
     }
 
     private fun findTask(taskId: String): Task? {

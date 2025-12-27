@@ -14,6 +14,8 @@ class ChecklistToolWindowFactory : ToolWindowFactory {
             "",
             false
         )
+        // Register the panel for disposal when the content is removed
+        content.setDisposer(checklistPanel)
         toolWindow.contentManager.addContent(content)
     }
 

@@ -3,6 +3,7 @@ package com.oleksiy.quicktodo.model
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
+import com.oleksiy.quicktodo.ui.ChecklistConstants
 import java.util.UUID
 
 @Tag("task")
@@ -33,7 +34,7 @@ data class Task(
         priority = p.name
     }
 
-    fun canAddSubtask(): Boolean = level < 2
+    fun canAddSubtask(): Boolean = level < ChecklistConstants.MAX_NESTING_LEVEL
 
     fun addSubtask(text: String, priority: Priority = Priority.NONE): Task {
         require(canAddSubtask()) { "Maximum nesting level reached" }

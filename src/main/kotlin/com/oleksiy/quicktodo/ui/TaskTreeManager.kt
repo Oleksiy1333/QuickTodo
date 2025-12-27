@@ -1,0 +1,177 @@
+package com.oleksiy.quicktodo.ui
+
+import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.service.TaskService
+import com.intellij.ui.CheckedTreeNode
+import javax.swing.JTree
+import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
+
+/**
+ * Manages tree state including node creation, expansion state, and task selection.
+ */
+class TaskTreeManager(
+    private val tree: JTree,
+    private val taskService: TaskService
+) {
+
+    /**
+     * Refreshes the tree with current tasks, preserving expansion state.
+     */
+    fun refreshTree() {
+        val currentExpandedIds = getExpandedTaskIdsFromTree()
+        val persistedExpandedIds = taskService.getExpandedTaskIds()
+        val expandedTaskIds = currentExpandedIds + persistedExpandedIds
+        val isFirstLoad = expandedTaskIds.isEmpty() && taskService.getTasks().isNotEmpty()
+
+        val tasks = taskService.getTasks()
+        val rootNode = CheckedTreeNode("Tasks")
+
+        tasks.forEach { task ->
+            rootNode.add(createTaskNode(task))
+        }
+
+        tree.model = DefaultTreeModel(rootNode)
+
+        if (isFirstLoad) {
+            expandAll()
+            saveExpandedState()
+        } else {
+            restoreExpandedState(expandedTaskIds)
+        }
+    }
+
+    /**
+     * Creates a tree node for a task and its subtasks recursively.
+     */
+    fun createTaskNode(task: Task): CheckedTreeNode {
+        val node = CheckedTreeNode(task)
+        node.isChecked = task.isCompleted
+        task.subtasks.forEach { subtask ->
+            node.add(createTaskNode(subtask))
+        }
+        return node
+    }
+
+    /**
+     * Expands all nodes in the tree.
+     */
+    fun expandAll() {
+        val root = tree.model.root as? CheckedTreeNode ?: return
+        traverseNodes(root) { node ->
+            tree.expandPath(TreePath(node.path))
+        }
+    }
+
+    /**
+     * Collapses all nodes except the root.
+     */
+    fun collapseAll() {
+        val root = tree.model.root as? CheckedTreeNode ?: return
+        traverseNodesPostOrder(root) { node ->
+            if (node.parent != null) {
+                tree.collapsePath(TreePath(node.path))
+            }
+        }
+    }
+
+    /**
+     * Saves the current expansion state to TaskService.
+     */
+    fun saveExpandedState() {
+        val expandedIds = getExpandedTaskIdsFromTree()
+        taskService.setExpandedTaskIds(expandedIds)
+    }
+
+    /**
+     * Gets all expanded task IDs from the current tree state.
+     */
+    fun getExpandedTaskIdsFromTree(): Set<String> {
+        val expandedIds = mutableSetOf<String>()
+        val root = tree.model.root as? CheckedTreeNode ?: return expandedIds
+
+        traverseNodes(root) { node ->
+            val task = node.userObject as? Task
+            if (task != null && tree.isExpanded(TreePath(node.path))) {
+                expandedIds.add(task.id)
+            }
+        }
+        return expandedIds
+    }
+
+    /**
+     * Restores expansion state from a set of task IDs.
+     */
+    fun restoreExpandedState(expandedTaskIds: Set<String>) {
+        val root = tree.model.root as? CheckedTreeNode ?: return
+
+        traverseNodes(root) { node ->
+            val task = node.userObject as? Task
+            if (task != null && task.id in expandedTaskIds) {
+                tree.expandPath(TreePath(node.path))
+            }
+        }
+    }
+
+    /**
+     * Ensures a specific task is expanded (useful when adding subtasks).
+     */
+    fun ensureTaskExpanded(taskId: String) {
+        val expandedIds = taskService.getExpandedTaskIds().toMutableSet()
+        expandedIds.add(taskId)
+        taskService.setExpandedTaskIds(expandedIds)
+    }
+
+    /**
+     * Selects a task by ID and scrolls to make it visible.
+     */
+    fun selectTaskById(taskId: String) {
+        val root = tree.model.root as? CheckedTreeNode ?: return
+        val path = findPathToTask(root, taskId)
+        if (path != null) {
+            tree.selectionPath = path
+            tree.scrollPathToVisible(path)
+        }
+    }
+
+    /**
+     * Finds the TreePath to a task by its ID.
+     */
+    fun findPathToTask(node: CheckedTreeNode, taskId: String): TreePath? {
+        val task = node.userObject as? Task
+        if (task?.id == taskId) {
+            return TreePath(node.path)
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChildAt(i) as? CheckedTreeNode ?: continue
+            val path = findPathToTask(child, taskId)
+            if (path != null) return path
+        }
+        return null
+    }
+
+    // =============== Generic Tree Traversal Utilities ===============
+
+    /**
+     * Traverses all nodes in pre-order (parent before children).
+     */
+    private fun traverseNodes(node: CheckedTreeNode, action: (CheckedTreeNode) -> Unit) {
+        action(node)
+        for (i in 0 until node.childCount) {
+            val child = node.getChildAt(i) as? CheckedTreeNode ?: continue
+            traverseNodes(child, action)
+        }
+    }
+
+    /**
+     * Traverses all nodes in post-order (children before parent).
+     * Useful for collapse operations where children must be collapsed first.
+     */
+    private fun traverseNodesPostOrder(node: CheckedTreeNode, action: (CheckedTreeNode) -> Unit) {
+        for (i in 0 until node.childCount) {
+            val child = node.getChildAt(i) as? CheckedTreeNode ?: continue
+            traverseNodesPostOrder(child, action)
+        }
+        action(node)
+    }
+}
