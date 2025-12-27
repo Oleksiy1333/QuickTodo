@@ -37,6 +37,7 @@
                     factoryClass="com.oleksiy.quicktodo.ui.ChecklistToolWindowFactory"/>
 
         <projectService serviceImplementation="com.oleksiy.quicktodo.service.TaskService"/>
+        <projectService serviceImplementation="com.oleksiy.quicktodo.service.FocusService"/>
     </extensions>
 
     <actions>

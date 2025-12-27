@@ -2,64 +2,59 @@ package com.oleksiy.quicktodo.ui
 
 import com.oleksiy.quicktodo.model.Priority
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
+import java.awt.Component
 import java.awt.Dimension
-import java.awt.FlowLayout
-import java.awt.event.FocusAdapter
-import java.awt.event.FocusEvent
+import javax.swing.DefaultListCellRenderer
 import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.JToggleButton
+import javax.swing.JList
 
-class NewTaskDialog(project: Project, dialogTitle: String = "New Task") : DialogWrapper(project) {
-    private val nameField = JBTextField()
-    private var selectedPriority = Priority.NONE
-    private val priorityButtons = mutableMapOf<Priority, JToggleButton>()
+class NewTaskDialog(
+    project: Project,
+    dialogTitle: String = "New Task",
+    initialText: String = "",
+    initialPriority: Priority = Priority.NONE
+) : DialogWrapper(project) {
+    private val nameField = JBTextField(initialText)
+    private val priorityComboBox = ComboBox(Priority.entries.toTypedArray())
 
     init {
         title = dialogTitle
+        priorityComboBox.selectedItem = initialPriority
+        priorityComboBox.renderer = PriorityListCellRenderer()
         init()
     }
 
     override fun createCenterPanel(): JComponent {
         nameField.preferredSize = Dimension(300, nameField.preferredSize.height)
 
-        val priorityPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
-
-        Priority.entries.forEach { priority ->
-            val button = JToggleButton(priority.displayName, QuickTodoIcons.getIconForPriority(priority))
-            button.isSelected = priority == Priority.NONE
-            button.isFocusable = true
-            button.isFocusPainted = true
-            button.addActionListener {
-                selectedPriority = priority
-                // Deselect other buttons
-                priorityButtons.forEach { (p, b) ->
-                    b.isSelected = (p == priority)
-                }
-            }
-            button.addFocusListener(object : FocusAdapter() {
-                override fun focusGained(e: FocusEvent?) {
-                    selectedPriority = priority
-                    priorityButtons.forEach { (p, b) ->
-                        b.isSelected = (p == priority)
-                    }
-                }
-            })
-            priorityButtons[priority] = button
-            priorityPanel.add(button)
-        }
-
         return FormBuilder.createFormBuilder()
             .addLabeledComponent("Name:", nameField)
-            .addLabeledComponent("Priority:", priorityPanel)
+            .addLabeledComponent("Priority:", priorityComboBox)
             .panel
     }
 
     override fun getPreferredFocusedComponent(): JComponent = nameField
 
     fun getTaskText(): String = nameField.text.trim()
-    fun getSelectedPriority(): Priority = selectedPriority
+    fun getSelectedPriority(): Priority = priorityComboBox.selectedItem as Priority
+
+    private inner class PriorityListCellRenderer : DefaultListCellRenderer() {
+        override fun getListCellRendererComponent(
+            list: JList<*>?,
+            value: Any?,
+            index: Int,
+            isSelected: Boolean,
+            cellHasFocus: Boolean
+        ): Component {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+            val priority = value as? Priority ?: return this
+            text = priority.displayName
+            icon = QuickTodoIcons.getIconForPriority(priority)
+            return this
+        }
+    }
 }

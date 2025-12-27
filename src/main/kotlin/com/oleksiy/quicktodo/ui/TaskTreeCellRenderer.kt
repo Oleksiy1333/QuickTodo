@@ -2,12 +2,17 @@ package com.oleksiy.quicktodo.ui
 
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.service.FocusService
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
+import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
+import java.awt.Color
 import javax.swing.JTree
 
-class TaskTreeCellRenderer : CheckboxTree.CheckboxTreeCellRenderer() {
+class TaskTreeCellRenderer(
+    private val focusService: FocusService
+) : CheckboxTree.CheckboxTreeCellRenderer() {
 
     override fun customizeRenderer(
         tree: JTree?,
@@ -24,18 +29,40 @@ class TaskTreeCellRenderer : CheckboxTree.CheckboxTreeCellRenderer() {
             return
         }
 
+        val isFocused = focusService.isFocused(task.id)
+        val hasAccumulatedTime = focusService.hasAccumulatedTime(task.id)
+
+        // Apply focus background highlighting
+        if (isFocused && !selected) {
+            textRenderer.background = FOCUS_BACKGROUND_COLOR
+            textRenderer.isOpaque = true
+        }
+
         // Check if effectively completed: either directly checked or all children are checked
         val isEffectivelyCompleted = node.isChecked || isAllChildrenChecked(node)
-        val attributes = if (isEffectivelyCompleted) {
-            SimpleTextAttributes(
+        val textAttributes = when {
+            isEffectivelyCompleted -> SimpleTextAttributes(
                 SimpleTextAttributes.STYLE_STRIKEOUT,
                 SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
             )
-        } else {
-            SimpleTextAttributes.REGULAR_ATTRIBUTES
+            isFocused -> SimpleTextAttributes(
+                SimpleTextAttributes.STYLE_BOLD,
+                null
+            )
+            else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
         }
 
-        textRenderer.append(task.text, attributes)
+        textRenderer.append(task.text, textAttributes)
+
+        // Show timer if has accumulated time
+        if (hasAccumulatedTime) {
+            val timeStr = focusService.getFormattedTime(task.id)
+            textRenderer.append("  ")
+            textRenderer.append(
+                "\u23F1 $timeStr",
+                SimpleTextAttributes.GRAYED_ATTRIBUTES
+            )
+        }
 
         // Set flag icon at the end based on priority
         val priority = task.getPriorityEnum()
@@ -57,5 +84,12 @@ class TaskTreeCellRenderer : CheckboxTree.CheckboxTreeCellRenderer() {
             }
         }
         return true
+    }
+
+    companion object {
+        private val FOCUS_BACKGROUND_COLOR = JBColor(
+            Color(255, 243, 205),  // Light theme: warm yellow
+            Color(60, 55, 40)      // Dark theme: muted gold
+        )
     }
 }

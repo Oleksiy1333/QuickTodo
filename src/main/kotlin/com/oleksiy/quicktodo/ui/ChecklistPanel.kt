@@ -7,12 +7,15 @@ import com.oleksiy.quicktodo.action.CollapseAllAction
 import com.oleksiy.quicktodo.action.ExpandAllAction
 import com.oleksiy.quicktodo.action.MoveTaskAction
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
 import com.oleksiy.quicktodo.ui.dnd.TaskDragDropHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
+import java.awt.datatransfer.StringSelection
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckboxTreeBase
@@ -38,12 +41,15 @@ import javax.swing.KeyStroke
 class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Disposable {
 
     private val taskService = TaskService.getInstance(project)
+    private val focusService = FocusService.getInstance(project)
     private lateinit var tree: CheckboxTree
     private lateinit var treeManager: TaskTreeManager
     private lateinit var dragDropHandler: TaskDragDropHandler
     private lateinit var contextMenuBuilder: TaskContextMenuBuilder
+    private lateinit var focusBarPanel: FocusBarPanel
     private val mainPanel = JPanel(BorderLayout())
     private var taskListener: (() -> Unit)? = null
+    private var focusListener: FocusService.FocusChangeListener? = null
 
     init {
         setupUI()
@@ -59,7 +65,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             onTaskMoved = { taskId -> treeManager.selectTaskById(taskId) },
             ensureTaskExpanded = { taskId -> treeManager.ensureTaskExpanded(taskId) }
         )
-        contextMenuBuilder = TaskContextMenuBuilder(taskService) { task -> editTask(task) }
+        contextMenuBuilder = TaskContextMenuBuilder(
+            taskService,
+            focusService,
+            onEditTask = { task -> editTask(task) },
+            onAddSubtask = { task -> addSubtaskToTask(task) }
+        )
 
         dragDropHandler.setup()
         treeManager.refreshTree()
@@ -68,6 +79,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val decoratorPanel = toolbarDecorator.createPanel()
         setupRightToolbar(decoratorPanel)
 
+        focusBarPanel = FocusBarPanel(project)
+        mainPanel.add(focusBarPanel, BorderLayout.NORTH)
         mainPanel.add(decoratorPanel, BorderLayout.CENTER)
         mainPanel.border = JBUI.Borders.empty()
     }
@@ -108,13 +121,16 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun createCheckboxTree(): CheckboxTree {
-        val renderer = TaskTreeCellRenderer()
+        val renderer = TaskTreeCellRenderer(focusService)
         val policy = CheckboxTreeBase.CheckPolicy(false, false, false, false)
 
         val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks"), policy) {
             override fun onNodeStateChanged(node: CheckedTreeNode) {
                 val task = node.userObject as? Task ?: return
                 taskService.setTaskCompletion(task.id, node.isChecked)
+                if (node.isChecked) {
+                    focusService.onTaskCompleted(task.id)
+                }
             }
 
             override fun paintComponent(g: Graphics) {
@@ -144,7 +160,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private fun setupMouseListeners(tree: CheckboxTree) {
         tree.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 2 && !e.isPopupTrigger) {
+                if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1) {
                     handleDoubleClick(e, tree)
                 }
             }
@@ -174,8 +190,13 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val node = path.lastPathComponent as? CheckedTreeNode ?: return
         val task = node.userObject as? Task ?: return
 
-        tree.selectionPath = path
-        contextMenuBuilder.buildContextMenu(task).show(tree, e.x, e.y)
+        // If clicked task is not in current selection, select only that task
+        // Otherwise keep multi-selection for copy operation
+        if (!tree.isPathSelected(path)) {
+            tree.selectionPath = path
+        }
+        val allSelectedTasks = getSelectedTasks()
+        contextMenuBuilder.buildContextMenu(task, allSelectedTasks).show(tree, e.x, e.y)
     }
 
     private fun setupKeyboardShortcuts(tree: CheckboxTree) {
@@ -184,11 +205,22 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
                 taskService.undoRemoveTask()
             }
         }
+        val copyAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                val tasks = getSelectedTasks()
+                if (tasks.isEmpty()) return
+                val text = tasks.joinToString("\n") { it.text }
+                CopyPasteManager.getInstance().setContents(StringSelection(text))
+            }
+        }
         tree.getInputMap(JComponent.WHEN_FOCUSED).apply {
             put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undoRemoveTask")
             put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK), "undoRemoveTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.CTRL_DOWN_MASK), "copyTaskText")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.META_DOWN_MASK), "copyTaskText")
         }
         tree.actionMap.put("undoRemoveTask", undoAction)
+        tree.actionMap.put("copyTaskText", copyAction)
     }
 
     private fun setupExpansionListener(tree: CheckboxTree) {
@@ -206,6 +238,17 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     override fun getSelectedTask(): Task? {
         val node = tree.lastSelectedPathComponent as? CheckedTreeNode
         return node?.userObject as? Task
+    }
+
+    private fun getSelectedTasks(): List<Task> {
+        return tree.selectionPaths?.mapNotNull { path ->
+            (path.lastPathComponent as? CheckedTreeNode)?.userObject as? Task
+        } ?: emptyList()
+    }
+
+    private fun addSubtaskToTask(task: Task) {
+        treeManager.selectTaskById(task.id)
+        addSubtask()
     }
 
     override fun addSubtask() {
@@ -313,6 +356,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private fun removeSelectedTask() {
         val selectedTask = getSelectedTask() ?: return
+        focusService.onTaskDeleted(selectedTask.id)
         taskService.removeTask(selectedTask.id)
     }
 
@@ -322,16 +366,23 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun editTask(task: Task) {
-        val newText = Messages.showInputDialog(
+        val dialog = NewTaskDialog(
             project,
-            "Edit task:",
-            "Edit Task",
-            null,
-            task.text,
-            null
+            dialogTitle = "Edit Task",
+            initialText = task.text,
+            initialPriority = task.getPriorityEnum()
         )
-        if (newText != null && newText.isNotBlank() && newText != task.text) {
-            taskService.updateTaskText(task.id, newText)
+        if (dialog.showAndGet()) {
+            val newText = dialog.getTaskText()
+            val newPriority = dialog.getSelectedPriority()
+            if (newText.isNotBlank()) {
+                if (newText != task.text) {
+                    taskService.updateTaskText(task.id, newText)
+                }
+                if (newPriority != task.getPriorityEnum()) {
+                    taskService.setTaskPriority(task.id, newPriority)
+                }
+            }
         }
     }
 
@@ -340,11 +391,25 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private fun setupListeners() {
         taskListener = { treeManager.refreshTree() }
         taskService.addListener(taskListener!!)
+
+        focusListener = object : FocusService.FocusChangeListener {
+            override fun onFocusChanged(focusedTaskId: String?) {
+                tree.repaint()
+            }
+
+            override fun onTimerTick() {
+                tree.repaint()
+            }
+        }
+        focusService.addListener(focusListener!!)
     }
 
     override fun dispose() {
         taskListener?.let { taskService.removeListener(it) }
         taskListener = null
+        focusListener?.let { focusService.removeListener(it) }
+        focusListener = null
+        focusBarPanel.dispose()
     }
 
     fun getContent(): JPanel = mainPanel

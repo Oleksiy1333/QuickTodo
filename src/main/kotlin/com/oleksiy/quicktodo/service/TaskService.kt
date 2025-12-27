@@ -223,11 +223,33 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         return null
     }
 
-    private fun findTask(taskId: String): Task? {
+    fun findTask(taskId: String): Task? {
         for (task in myState.tasks) {
             task.findTask(taskId)?.let { return it }
         }
         return null
+    }
+
+    fun findParentId(taskId: String): String? {
+        return findParentIdRecursive(myState.tasks, taskId, null)
+    }
+
+    private fun findParentIdRecursive(
+        tasks: List<Task>,
+        targetId: String,
+        currentParentId: String?
+    ): String? {
+        for (task in tasks) {
+            if (task.id == targetId) return currentParentId
+            val result = findParentIdRecursive(task.subtasks, targetId, task.id)
+            if (result != null) return result
+        }
+        return null
+    }
+
+    fun isAncestorOf(ancestorId: String, descendantId: String): Boolean {
+        val ancestor = findTask(ancestorId) ?: return false
+        return ancestor.findTask(descendantId) != null
     }
 
     fun addListener(listener: () -> Unit) {
