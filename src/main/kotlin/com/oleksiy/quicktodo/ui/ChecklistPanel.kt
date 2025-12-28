@@ -411,11 +411,11 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
         focusListener = object : FocusService.FocusChangeListener {
             override fun onFocusChanged(focusedTaskId: String?) {
-                tree.repaint()
+                tree.repaint(tree.visibleRect)
             }
 
             override fun onTimerTick() {
-                tree.repaint()
+                tree.repaint(tree.visibleRect)
             }
         }
         focusService.addListener(focusListener!!)
