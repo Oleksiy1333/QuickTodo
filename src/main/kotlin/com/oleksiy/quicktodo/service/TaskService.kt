@@ -1,5 +1,6 @@
 package com.oleksiy.quicktodo.service
 
+import com.oleksiy.quicktodo.model.CodeLocation
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.undo.*
@@ -139,6 +140,22 @@ class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor
 
         task.setPriorityEnum(priority)
         undoRedoManager.recordCommand(SetTaskPriorityCommand(taskId, oldPriority, priority))
+        notifyListeners()
+        return true
+    }
+
+    fun setTaskLocation(taskId: String, location: CodeLocation?): Boolean {
+        val task = findTask(taskId) ?: return false
+        val oldLocation = task.codeLocation?.copy()
+
+        // Skip if no change
+        if (oldLocation == location) return true
+        if (oldLocation?.relativePath == location?.relativePath &&
+            oldLocation?.line == location?.line &&
+            oldLocation?.column == location?.column) return true
+
+        task.codeLocation = location?.copy()
+        undoRedoManager.recordCommand(SetTaskLocationCommand(taskId, oldLocation, location?.copy()))
         notifyListeners()
         return true
     }
@@ -318,6 +335,13 @@ class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor
     override fun setTaskPriorityWithoutUndo(taskId: String, priority: Priority): Boolean {
         val task = findTask(taskId) ?: return false
         task.setPriorityEnum(priority)
+        notifyListeners()
+        return true
+    }
+
+    override fun setTaskLocationWithoutUndo(taskId: String, location: CodeLocation?): Boolean {
+        val task = findTask(taskId) ?: return false
+        task.codeLocation = location?.copy()
         notifyListeners()
         return true
     }

@@ -14,8 +14,10 @@ class AddTaskAction : AnAction() {
         if (dialog.showAndGet()) {
             val text = dialog.getTaskText()
             val priority = dialog.getSelectedPriority()
+            val location = dialog.getCodeLocation()
             if (text.isNotBlank()) {
-                taskService.addTask(text, priority)
+                val task = taskService.addTask(text, priority)
+                location?.let { taskService.setTaskLocation(task.id, it) }
             }
         }
     }

@@ -20,6 +20,7 @@ object TaskSnapshot {
             priority = task.priority,
             totalTimeSpentMs = task.totalTimeSpentMs,
             lastFocusStartedAt = task.lastFocusStartedAt,
+            codeLocation = task.codeLocation?.copy(),
             subtasks = task.subtasks.map { deepCopy(it) }.toMutableList()
         )
     }

@@ -29,10 +29,12 @@ data class Task(
     @Attribute("lastFocusStartedAt")
     var lastFocusStartedAt: Long? = null,
 
+    var codeLocation: CodeLocation? = null,
+
     @XCollection(propertyElementName = "subtasks", elementName = "task")
     var subtasks: MutableList<Task> = mutableListOf()
 ) {
-    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, mutableListOf())
+    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, null, mutableListOf())
 
     fun getPriorityEnum(): Priority = Priority.fromString(priority)
 
@@ -41,6 +43,8 @@ data class Task(
     }
 
     fun canAddSubtask(): Boolean = level < ChecklistConstants.MAX_NESTING_LEVEL
+
+    fun hasCodeLocation(): Boolean = codeLocation?.isValid() == true
 
     fun addSubtask(text: String, priority: Priority = Priority.NONE): Task {
         require(canAddSubtask()) { "Maximum nesting level reached" }

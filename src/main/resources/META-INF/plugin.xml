@@ -13,14 +13,14 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        A lightweight task management plugin for organizing hierarchical tasks within your project.
+        Todo list and task management without leaving your IDE.
         <br><br>
         <b>Features:</b>
         <ul>
-            <li>Hierarchical subtasks up to 3 levels deep</li>
-            <li>Task priorities</li>
-            <li>Focus timer to track time spent on tasks</li>
-            <li>Per-project task persistence</li>
+            <li>Nested subtasks (3 levels)</li>
+            <li>Priorities</li>
+            <li>Focus timer</li>
+            <li>Per-project storage</li>
         </ul>
     ]]></description>
 

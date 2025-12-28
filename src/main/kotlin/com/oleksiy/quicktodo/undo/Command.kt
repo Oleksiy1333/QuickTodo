@@ -1,5 +1,6 @@
 package com.oleksiy.quicktodo.undo
 
+import com.oleksiy.quicktodo.model.CodeLocation
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 
@@ -201,5 +202,29 @@ data class ClearCompletedTasksCommand(
 
     override fun redo(executor: CommandExecutor) {
         executor.clearCompletedTasksWithoutUndo()
+    }
+}
+
+/**
+ * Command for setting or clearing task code location.
+ */
+data class SetTaskLocationCommand(
+    val taskId: String,
+    val oldLocation: CodeLocation?,
+    val newLocation: CodeLocation?
+) : Command {
+    override val description: String
+        get() = when {
+            oldLocation == null && newLocation != null -> "Attach location"
+            oldLocation != null && newLocation == null -> "Remove location"
+            else -> "Update location"
+        }
+
+    override fun undo(executor: CommandExecutor) {
+        executor.setTaskLocationWithoutUndo(taskId, oldLocation)
+    }
+
+    override fun redo(executor: CommandExecutor) {
+        executor.setTaskLocationWithoutUndo(taskId, newLocation)
     }
 }

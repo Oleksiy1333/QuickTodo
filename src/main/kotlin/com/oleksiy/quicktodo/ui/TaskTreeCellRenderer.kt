@@ -6,11 +6,22 @@ import com.oleksiy.quicktodo.service.FocusService
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.util.ui.JBUI
+import java.awt.Color
 import javax.swing.JTree
 
 class TaskTreeCellRenderer(
     private val focusService: FocusService
 ) : CheckboxTree.CheckboxTreeCellRenderer() {
+
+    // Track location link text for click detection
+    var textBeforeLink: String = ""
+        private set
+    var linkText: String = ""
+        private set
+
+    // Track hovered row for highlight
+    var hoveredRow: Int = -1
 
     override fun customizeRenderer(
         tree: JTree?,
@@ -27,6 +38,12 @@ class TaskTreeCellRenderer(
             return
         }
 
+        // Apply hover highlight (subtle background when not selected)
+        if (!selected && row == hoveredRow) {
+            val hoverColor = JBUI.CurrentTheme.List.Hover.background(true)
+            textRenderer.background = hoverColor
+        }
+
         val isFocused = focusService.isFocused(task.id)
         val isAncestorOfFocused = isAncestorOfFocusedTask(task)
         val hasAccumulatedTime = focusService.hasAccumulatedTime(task.id)
@@ -41,7 +58,7 @@ class TaskTreeCellRenderer(
         }
 
         // Sync checkbox visual with effective completion state
-        myCheckbox.isSelected = isEffectivelyCompleted
+        checkbox.isSelected = isEffectivelyCompleted
 
         val textAttributes = when {
             isEffectivelyCompleted -> SimpleTextAttributes(
@@ -57,6 +74,20 @@ class TaskTreeCellRenderer(
 
         textRenderer.append(task.text, textAttributes)
 
+        // Show completion progress for parent tasks (e.g., "2/5")
+        if (task.subtasks.isNotEmpty()) {
+            val (completed, total) = countCompletionProgress(task)
+            textRenderer.append("  ")
+            textRenderer.append(
+                "$completed/$total",
+                SimpleTextAttributes.GRAYED_ATTRIBUTES
+            )
+        }
+
+        // Reset link tracking
+        textBeforeLink = ""
+        linkText = ""
+
         // Show timer if has accumulated time
         if (hasAccumulatedTime) {
             val timeStr = focusService.getFormattedTime(task.id)
@@ -67,7 +98,7 @@ class TaskTreeCellRenderer(
             )
         }
 
-        // Set flag icon at the end based on priority
+        // Set flag icon based on priority
         val priority = task.getPriorityEnum()
         if (priority != Priority.NONE) {
             val icon = QuickTodoIcons.getIconForPriority(priority)
@@ -76,6 +107,35 @@ class TaskTreeCellRenderer(
                 textRenderer.isIconOnTheRight = true
             }
         }
+
+        // Show linked file location at the end, right-aligned with padding
+        if (task.hasCodeLocation()) {
+            // Add padding to push link towards the right
+            textRenderer.append("        ", SimpleTextAttributes.REGULAR_ATTRIBUTES)
+            textBeforeLink = textRenderer.toString()
+            linkText = task.codeLocation!!.toDisplayString()
+            val linkAttributes = SimpleTextAttributes(
+                SimpleTextAttributes.STYLE_UNDERLINE,
+                SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
+            )
+            textRenderer.append(linkText, linkAttributes)
+        }
+    }
+
+    private fun countCompletionProgress(task: Task): Pair<Int, Int> {
+        var completed = 0
+        var total = 0
+        for (subtask in task.subtasks) {
+            total++
+            if (subtask.isCompleted) {
+                completed++
+            }
+            // Count nested subtasks too
+            val (nestedCompleted, nestedTotal) = countCompletionProgress(subtask)
+            completed += nestedCompleted
+            total += nestedTotal
+        }
+        return Pair(completed, total)
     }
 
     private fun isAllChildrenChecked(node: CheckedTreeNode): Boolean {

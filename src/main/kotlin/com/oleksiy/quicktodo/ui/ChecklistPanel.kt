@@ -154,7 +154,22 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
                     )
                 }
             }
+
+            // Tooltip for location links - shows full path
+            override fun getToolTipText(event: MouseEvent): String? {
+                val path = getPathForLocation(event.x, event.y) ?: return null
+                val node = path.lastPathComponent as? CheckedTreeNode ?: return null
+                val task = node.userObject as? Task ?: return null
+
+                if (task.hasCodeLocation() && isMouseOverLocationLink(event, this)) {
+                    return task.codeLocation?.relativePath
+                }
+                return null
+            }
         }
+
+        // Enable tooltips
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(checkboxTree)
 
         setupMouseListeners(checkboxTree)
         setupKeyboardShortcuts(checkboxTree)
@@ -169,6 +184,11 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private fun setupMouseListeners(tree: CheckboxTree) {
         tree.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
+                if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
+                    if (handleLocationClick(e, tree)) {
+                        return
+                    }
+                }
                 if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1) {
                     handleDoubleClick(e, tree)
                 }
@@ -177,6 +197,107 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             override fun mousePressed(e: MouseEvent) = maybeShowContextMenu(e, tree)
             override fun mouseReleased(e: MouseEvent) = maybeShowContextMenu(e, tree)
         })
+
+        // Add mouse motion listener for hand cursor on location links and hover highlight
+        tree.addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+            override fun mouseMoved(e: MouseEvent) {
+                val isOverLink = isMouseOverLocationLink(e, tree)
+                tree.cursor = if (isOverLink) {
+                    java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
+                } else {
+                    java.awt.Cursor.getDefaultCursor()
+                }
+
+                // Update hovered row for highlight
+                val renderer = tree.cellRenderer as? TaskTreeCellRenderer
+                val newHoveredRow = tree.getRowForLocation(e.x, e.y)
+                if (renderer != null && renderer.hoveredRow != newHoveredRow) {
+                    renderer.hoveredRow = newHoveredRow
+                    tree.repaint()
+                }
+            }
+        })
+
+        // Clear hover when mouse exits
+        tree.addMouseListener(object : MouseAdapter() {
+            override fun mouseExited(e: MouseEvent) {
+                val renderer = tree.cellRenderer as? TaskTreeCellRenderer
+                if (renderer != null && renderer.hoveredRow != -1) {
+                    renderer.hoveredRow = -1
+                    tree.repaint()
+                }
+            }
+        })
+    }
+
+    private fun handleLocationClick(e: MouseEvent, tree: CheckboxTree): Boolean {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return false
+        val task = node.userObject as? Task ?: return false
+
+        if (!task.hasCodeLocation()) return false
+
+        val row = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(row) ?: return false
+
+        // Get the renderer to access location bounds
+        val renderer = tree.cellRenderer as? TaskTreeCellRenderer ?: return false
+
+        // Configure renderer for this cell to get correct bounds
+        tree.getCellRenderer().getTreeCellRendererComponent(
+            tree, node, tree.isRowSelected(row), tree.isExpanded(row),
+            tree.model.isLeaf(node), row, tree.hasFocus()
+        )
+
+        if (renderer.linkText.isEmpty()) return false
+
+        // Calculate click position relative to text start
+        val textStartX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
+        val clickRelativeX = e.x - textStartX
+
+        // Use actual string width for accurate positioning
+        val fm = tree.getFontMetrics(tree.font)
+        val locationStartX = fm.stringWidth(renderer.textBeforeLink)
+        val locationEndX = locationStartX + fm.stringWidth(renderer.linkText)
+
+        if (clickRelativeX >= locationStartX && clickRelativeX <= locationEndX) {
+            task.codeLocation?.let { location ->
+                CodeLocationUtil.navigateToLocation(project, location)
+            }
+            return true
+        }
+
+        return false
+    }
+
+    private fun isMouseOverLocationLink(e: MouseEvent, tree: CheckboxTree): Boolean {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return false
+        val task = node.userObject as? Task ?: return false
+
+        if (!task.hasCodeLocation()) return false
+
+        val row = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(row) ?: return false
+
+        val renderer = tree.cellRenderer as? TaskTreeCellRenderer ?: return false
+
+        tree.getCellRenderer().getTreeCellRendererComponent(
+            tree, node, tree.isRowSelected(row), tree.isExpanded(row),
+            tree.model.isLeaf(node), row, tree.hasFocus()
+        )
+
+        if (renderer.linkText.isEmpty()) return false
+
+        val textStartX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
+        val clickRelativeX = e.x - textStartX
+
+        // Use actual string width for accurate positioning
+        val fm = tree.getFontMetrics(tree.font)
+        val locationStartX = fm.stringWidth(renderer.textBeforeLink)
+        val locationEndX = locationStartX + fm.stringWidth(renderer.linkText)
+
+        return clickRelativeX >= locationStartX && clickRelativeX <= locationEndX
     }
 
     private fun handleDoubleClick(e: MouseEvent, tree: CheckboxTree) {
@@ -297,10 +418,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         if (dialog.showAndGet()) {
             val text = dialog.getTaskText()
             val priority = dialog.getSelectedPriority()
+            val location = dialog.getCodeLocation()
             if (text.isNotBlank()) {
                 treeManager.ensureTaskExpanded(selectedTask.id)
                 val subtask = taskService.addSubtask(selectedTask.id, text, priority)
                 if (subtask != null) {
+                    location?.let { taskService.setTaskLocation(subtask.id, it) }
                     treeManager.selectTaskById(subtask.id)
                 }
             }
@@ -385,8 +508,10 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         if (dialog.showAndGet()) {
             val text = dialog.getTaskText()
             val priority = dialog.getSelectedPriority()
+            val location = dialog.getCodeLocation()
             if (text.isNotBlank()) {
                 val task = taskService.addTask(text, priority)
+                location?.let { taskService.setTaskLocation(task.id, it) }
                 treeManager.selectTaskById(task.id)
             }
         }
@@ -408,17 +533,23 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             project,
             dialogTitle = "Edit Task",
             initialText = task.text,
-            initialPriority = task.getPriorityEnum()
+            initialPriority = task.getPriorityEnum(),
+            initialLocation = task.codeLocation
         )
         if (dialog.showAndGet()) {
             val newText = dialog.getTaskText()
             val newPriority = dialog.getSelectedPriority()
+            val newLocation = dialog.getCodeLocation()
             if (newText.isNotBlank()) {
                 if (newText != task.text) {
                     taskService.updateTaskText(task.id, newText)
                 }
                 if (newPriority != task.getPriorityEnum()) {
                     taskService.setTaskPriority(task.id, newPriority)
+                }
+                // Update location (handles add, update, and remove)
+                if (newLocation != task.codeLocation) {
+                    taskService.setTaskLocation(task.id, newLocation)
                 }
             }
         }

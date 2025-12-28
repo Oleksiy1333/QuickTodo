@@ -1,5 +1,6 @@
 package com.oleksiy.quicktodo.undo
 
+import com.oleksiy.quicktodo.model.CodeLocation
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 
@@ -19,6 +20,7 @@ interface CommandExecutor {
     fun updateTaskTextWithoutUndo(taskId: String, newText: String): Boolean
     fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean
     fun setTaskPriorityWithoutUndo(taskId: String, priority: Priority): Boolean
+    fun setTaskLocationWithoutUndo(taskId: String, location: CodeLocation?): Boolean
 
     // Task movement without undo registration
     fun moveTaskWithoutUndo(taskId: String, targetParentId: String?, targetIndex: Int): Boolean
