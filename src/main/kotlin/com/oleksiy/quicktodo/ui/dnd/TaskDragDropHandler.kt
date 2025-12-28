@@ -38,6 +38,9 @@ class TaskDragDropHandler(
     var dropPosition: DropPosition = DropPosition.NONE
         private set
 
+    // Cache target task to survive tree rebuilds
+    private var dropTargetTask: Task? = null
+
     // Auto-scroll state
     private var autoScrollDirection: Int = 0
     private val autoScrollTimer = Timer(ChecklistConstants.AUTO_SCROLL_DELAY_MS) {
@@ -59,6 +62,7 @@ class TaskDragDropHandler(
         if (dropTargetRow != -1 || dropPosition != DropPosition.NONE) {
             dropTargetRow = -1
             dropPosition = DropPosition.NONE
+            dropTargetTask = null
             tree.repaint()
         }
         stopAutoScroll()
@@ -146,7 +150,16 @@ class TaskDragDropHandler(
     private fun setupDragSource() {
         val dragSource = DragSource.getDefaultDragSource()
         dragSource.createDefaultDragGestureRecognizer(tree, DnDConstants.ACTION_MOVE) { dge ->
-            val path = tree.getPathForLocation(dge.dragOrigin.x, dge.dragOrigin.y)
+            // Use getClosestRowForLocation to detect row even when clicking on empty space within the row
+            val row = tree.getClosestRowForLocation(dge.dragOrigin.x, dge.dragOrigin.y)
+            if (row < 0) return@createDefaultDragGestureRecognizer
+
+            val rowBounds = tree.getRowBounds(row)
+            if (rowBounds == null || dge.dragOrigin.y < rowBounds.y || dge.dragOrigin.y >= rowBounds.y + rowBounds.height) {
+                return@createDefaultDragGestureRecognizer
+            }
+
+            val path = tree.getPathForRow(row)
                 ?: return@createDefaultDragGestureRecognizer
             val node = path.lastPathComponent as? CheckedTreeNode
                 ?: return@createDefaultDragGestureRecognizer
@@ -180,10 +193,9 @@ class TaskDragDropHandler(
     }
 
     private fun filterOutDescendants(tasks: List<Task>): List<Task> {
-        val taskIds = tasks.map { it.id }.toSet()
         return tasks.filter { task ->
             // Keep task only if none of its ancestors are in the selection
-            !tasks.any { other -> other.id != task.id && isDescendant(other, task) }
+            !tasks.any { other -> other.id != task.id && taskService.isAncestorOf(other.id, task.id) }
         }
     }
 
@@ -208,23 +220,34 @@ class TaskDragDropHandler(
         val location = dtde.location
         updateAutoScroll(location.y)
 
-        val path = tree.getPathForLocation(location.x, location.y)
+        // Use getClosestRowForLocation to detect row even when mouse is on empty space
+        val targetRow = tree.getClosestRowForLocation(location.x, location.y)
+        if (targetRow < 0) {
+            clearDropIndicator()
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
 
+        val rowBounds = tree.getRowBounds(targetRow)
+        if (rowBounds == null || location.y < rowBounds.y || location.y >= rowBounds.y + rowBounds.height) {
+            // Mouse is outside actual row bounds (e.g., below all rows)
+            clearDropIndicator()
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
+
+        val path = tree.getPathForRow(targetRow)
         if (path == null) {
             clearDropIndicator()
             dtde.acceptDrag(DnDConstants.ACTION_MOVE)
             return
         }
 
-        val targetRow = tree.getRowForPath(path)
-        val rowBounds = tree.getRowBounds(targetRow)
-        if (rowBounds == null) {
-            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
-            return
-        }
+        val targetNode = path.lastPathComponent as? CheckedTreeNode
+        val targetTask = targetNode?.userObject as? Task
 
         val newDropPosition = calculateDropPosition(path, location.y - rowBounds.y, rowBounds.height)
-        updateDropIndicator(targetRow, newDropPosition)
+        updateDropIndicator(targetRow, newDropPosition, targetTask)
         updateHoverExpand(targetRow, path)
         dtde.acceptDrag(DnDConstants.ACTION_MOVE)
     }
@@ -239,7 +262,7 @@ class TaskDragDropHandler(
 
         // Check if any source task is an ancestor of the target (would create circular dependency)
         val hasCircularDependency = sourceTasks.isNotEmpty() && targetTask != null &&
-            sourceTasks.any { isDescendant(it, targetTask) }
+            sourceTasks.any { taskService.isAncestorOf(it.id, targetTask.id) }
 
         return when {
             hasCircularDependency -> DropPosition.NONE
@@ -250,11 +273,15 @@ class TaskDragDropHandler(
         }
     }
 
-    private fun updateDropIndicator(targetRow: Int, newPosition: DropPosition) {
+    private fun updateDropIndicator(targetRow: Int, newPosition: DropPosition, targetTask: Task?) {
         if (dropTargetRow != targetRow || dropPosition != newPosition) {
             dropTargetRow = targetRow
             dropPosition = newPosition
+            dropTargetTask = targetTask
             tree.repaint()
+        } else if (dropTargetTask?.id != targetTask?.id) {
+            // Same row but different task (tree was rebuilt)
+            dropTargetTask = targetTask
         }
     }
 
@@ -265,24 +292,22 @@ class TaskDragDropHandler(
             return
         }
 
-        // Use the cached drop position that was shown to the user
+        // Use the cached drop state that was shown to the user
         val cachedPosition = dropPosition
         val cachedRow = dropTargetRow
+        val cachedTarget = dropTargetTask
 
         dtde.acceptDrop(DnDConstants.ACTION_MOVE)
 
-        val location = dtde.location
-        val targetPath = tree.getPathForLocation(location.x, location.y)
-
         when {
-            cachedRow < 0 || targetPath == null || targetPath.pathCount <= 1 -> {
-                handleDropAtRoot(sourceTasks, location.x, location.y)
+            cachedRow < 0 || cachedTarget == null -> {
+                handleDropAtRoot(sourceTasks, dtde.location.x, dtde.location.y)
             }
             cachedPosition == DropPosition.NONE -> {
                 // Invalid drop position - do nothing
             }
             else -> {
-                handleDropOnTask(sourceTasks, targetPath, cachedPosition)
+                handleDropOnTask(sourceTasks, cachedTarget, cachedPosition)
             }
         }
 
@@ -312,42 +337,33 @@ class TaskDragDropHandler(
         return rootTasks.size
     }
 
-    private fun handleDropOnTask(sourceTasks: List<Task>, targetPath: TreePath, position: DropPosition) {
-        val targetNode = targetPath.lastPathComponent as? CheckedTreeNode ?: return
-        val targetTask = targetNode.userObject as? Task ?: return
+    private fun handleDropOnTask(sourceTasks: List<Task>, targetTask: Task, position: DropPosition) {
+        // Verify target task still exists in TaskService
+        val verifiedTarget = taskService.findTask(targetTask.id) ?: return
 
         // Check for circular dependency or self-drop
         val sourceIds = sourceTasks.map { it.id }.toSet()
-        if (sourceIds.contains(targetTask.id) || sourceTasks.any { isDescendant(it, targetTask) }) return
+        if (sourceIds.contains(verifiedTarget.id) ||
+            sourceIds.any { taskService.isAncestorOf(it, verifiedTarget.id) }) return
 
         when (position) {
-            DropPosition.ABOVE -> moveTasksAsSibling(sourceTasks, targetTask, targetPath, 0)
-            DropPosition.BELOW -> moveTasksAsSibling(sourceTasks, targetTask, targetPath, 1)
-            DropPosition.AS_CHILD -> moveTasksAsChild(sourceTasks, targetTask)
+            DropPosition.ABOVE -> moveTasksAsSibling(sourceTasks, verifiedTarget, 0)
+            DropPosition.BELOW -> moveTasksAsSibling(sourceTasks, verifiedTarget, 1)
+            DropPosition.AS_CHILD -> moveTasksAsChild(sourceTasks, verifiedTarget)
             DropPosition.NONE -> { /* Should not happen, handled in handleDrop */ }
         }
     }
 
-    private fun moveTasksAsSibling(sourceTasks: List<Task>, targetTask: Task, targetPath: TreePath, indexOffset: Int) {
-        val parentTask = getParentTaskFromPath(targetPath)
+    private fun moveTasksAsSibling(sourceTasks: List<Task>, targetTask: Task, indexOffset: Int) {
+        val parentId = taskService.findParentId(targetTask.id)
+        val parentTask = parentId?.let { taskService.findTask(it) }
         val targetIndex = getTaskIndex(targetTask, parentTask) + indexOffset
-        taskService.moveTasks(sourceTasks.map { it.id }, parentTask?.id, targetIndex)
+        taskService.moveTasks(sourceTasks.map { it.id }, parentId, targetIndex)
     }
 
     private fun moveTasksAsChild(sourceTasks: List<Task>, targetTask: Task) {
         taskService.moveTasks(sourceTasks.map { it.id }, targetTask.id, 0)
         ensureTaskExpanded(targetTask.id)
-    }
-
-    private fun getParentTaskFromPath(path: TreePath): Task? {
-        val parentPath = path.parentPath ?: return null
-        val parentNode = parentPath.lastPathComponent as? CheckedTreeNode ?: return null
-        return parentNode.userObject as? Task
-    }
-
-    private fun isDescendant(parent: Task, potentialChild: Task): Boolean {
-        if (parent.id == potentialChild.id) return true
-        return parent.subtasks.any { isDescendant(it, potentialChild) }
     }
 
     private fun getTaskIndex(task: Task, parent: Task?): Int {

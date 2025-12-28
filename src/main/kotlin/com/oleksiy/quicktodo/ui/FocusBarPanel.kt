@@ -71,7 +71,7 @@ class FocusBarPanel(
 
         isVisible = true
 
-        focusLabel.text = "FOCUS: ${task.text}"
+        focusLabel.text = "${task.text}"
         focusLabel.icon = QuickTodoIcons.Focus
 
         updateTimerDisplay()
