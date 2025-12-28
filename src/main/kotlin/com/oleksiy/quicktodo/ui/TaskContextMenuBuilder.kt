@@ -13,12 +13,15 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import javax.swing.JPopupMenu
 
 /**
  * Builds context menus for tasks in the checklist tree.
  */
 class TaskContextMenuBuilder(
+    private val project: Project,
     private val taskService: TaskService,
     private val focusService: FocusService,
     private val onEditTask: (Task) -> Unit,
@@ -81,6 +84,40 @@ class TaskContextMenuBuilder(
         actionGroup.add(object : AnAction("Edit Task", "Edit task text", AllIcons.Actions.Edit) {
             override fun actionPerformed(e: AnActionEvent) = onEditTask(task)
         })
+
+        // Location actions
+        if (task.hasCodeLocation()) {
+            // Clear location if task already has one
+            actionGroup.add(object : AnAction(
+                "Clear Linked Location",
+                "Remove the linked code location from this task",
+                AllIcons.Actions.Cancel
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    taskService.setTaskLocation(task.id, null)
+                }
+            })
+        } else {
+            // Link current location
+            actionGroup.add(object : AnAction(
+                "Link Current Location",
+                "Attach current cursor position to this task",
+                AllIcons.Actions.AddFile
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val location = CodeLocationUtil.captureCurrentLocation(project)
+                    if (location != null) {
+                        taskService.setTaskLocation(task.id, location)
+                    } else {
+                        Messages.showWarningDialog(
+                            project,
+                            "No file is currently open in the editor. Please open a file first.",
+                            "Cannot Link Location"
+                        )
+                    }
+                }
+            })
+        }
 
         // Copy action
         actionGroup.add(object : AnAction("Copy", "Copy task name to clipboard", AllIcons.Actions.Copy) {

@@ -71,6 +71,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             ensureTaskExpanded = { taskId -> treeManager.ensureTaskExpanded(taskId) }
         )
         contextMenuBuilder = TaskContextMenuBuilder(
+            project,
             taskService,
             focusService,
             onEditTask = { task -> editTask(task) },
