@@ -5,9 +5,7 @@ import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.FocusService
 import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
-import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
-import java.awt.Color
 import javax.swing.JTree
 
 class TaskTreeCellRenderer(
@@ -30,13 +28,8 @@ class TaskTreeCellRenderer(
         }
 
         val isFocused = focusService.isFocused(task.id)
+        val isAncestorOfFocused = isAncestorOfFocusedTask(task)
         val hasAccumulatedTime = focusService.hasAccumulatedTime(task.id)
-
-        // Apply focus background highlighting
-        if (isFocused && !selected) {
-            textRenderer.background = FOCUS_BACKGROUND_COLOR
-            textRenderer.isOpaque = true
-        }
 
         // Check if effectively completed:
         // - For parents: only when ALL children are effectively completed
@@ -55,8 +48,8 @@ class TaskTreeCellRenderer(
                 SimpleTextAttributes.STYLE_STRIKEOUT,
                 SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
             )
-            isFocused -> SimpleTextAttributes(
-                SimpleTextAttributes.STYLE_BOLD,
+            isFocused || isAncestorOfFocused -> SimpleTextAttributes(
+                SimpleTextAttributes.STYLE_BOLD or SimpleTextAttributes.STYLE_UNDERLINE,
                 null
             )
             else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
@@ -96,10 +89,9 @@ class TaskTreeCellRenderer(
         return true
     }
 
-    companion object {
-        private val FOCUS_BACKGROUND_COLOR = JBColor(
-            Color(255, 243, 205),  // Light theme: warm yellow
-            Color(60, 55, 40)      // Dark theme: muted gold
-        )
+    private fun isAncestorOfFocusedTask(task: Task): Boolean {
+        val focusedTaskId = focusService.getFocusedTaskId() ?: return false
+        // Check if focused task is in this task's subtree (but not the task itself)
+        return task.id != focusedTaskId && task.findTask(focusedTaskId) != null
     }
 }
