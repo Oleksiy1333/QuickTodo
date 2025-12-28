@@ -61,9 +61,7 @@ class TaskContextMenuBuilder(
         }
 
         // Priority submenu
-        val priorityGroup = DefaultActionGroup("Set Priority", true).apply {
-            templatePresentation.icon = QuickTodoIcons.getIconForPriority(Priority.HIGH)
-        }
+        val priorityGroup = DefaultActionGroup("Set Priority", true)
 
         Priority.entries.forEach { priority ->
             priorityGroup.add(SetPriorityAction(priority, { task }, taskService))

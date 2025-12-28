@@ -189,26 +189,42 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     }
 
     fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
-        val task = findTask(taskId) ?: return false
+        return moveTasks(listOf(taskId), targetParentId, targetIndex)
+    }
 
-        // Remove task from its current location (without capturing undo info)
-        findAndRemoveTask(myState.tasks, taskId, null, captureInfo = false) ?: return false
+    fun moveTasks(taskIds: List<String>, targetParentId: String?, targetIndex: Int): Boolean {
+        if (taskIds.isEmpty()) return false
+
+        // Collect all tasks to move (in order)
+        val tasksToMove = taskIds.mapNotNull { findTask(it) }
+        if (tasksToMove.size != taskIds.size) return false
+
+        // Remove all tasks from their current locations
+        for (taskId in taskIds) {
+            findAndRemoveTask(myState.tasks, taskId, null, captureInfo = false) ?: return false
+        }
 
         // Insert at new location
         if (targetParentId == null) {
             // Moving to root level
-            val insertIndex = targetIndex.coerceIn(0, myState.tasks.size)
-            task.level = 0
-            updateSubtaskLevels(task, 0)
-            myState.tasks.add(insertIndex, task)
+            var insertIndex = targetIndex.coerceIn(0, myState.tasks.size)
+            for (task in tasksToMove) {
+                task.level = 0
+                updateSubtaskLevels(task, 0)
+                myState.tasks.add(insertIndex, task)
+                insertIndex++
+            }
         } else {
             // Moving under a parent
             val targetParent = findTask(targetParentId) ?: return false
             if (!targetParent.canAddSubtask()) return false
-            val insertIndex = targetIndex.coerceIn(0, targetParent.subtasks.size)
-            task.level = targetParent.level + 1
-            updateSubtaskLevels(task, task.level)
-            targetParent.subtasks.add(insertIndex, task)
+            var insertIndex = targetIndex.coerceIn(0, targetParent.subtasks.size)
+            for (task in tasksToMove) {
+                task.level = targetParent.level + 1
+                updateSubtaskLevels(task, task.level)
+                targetParent.subtasks.add(insertIndex, task)
+                insertIndex++
+            }
         }
 
         notifyListeners()
