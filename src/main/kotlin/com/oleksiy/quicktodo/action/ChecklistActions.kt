@@ -157,3 +157,45 @@ class SetPriorityAction(
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
 }
+
+/**
+ * Action to undo the last operation.
+ */
+class UndoAction(
+    private val taskServiceProvider: () -> TaskService
+) : AnAction("Undo", "Undo last action", AllIcons.Actions.Undo) {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        taskServiceProvider().undo()
+    }
+
+    override fun update(e: AnActionEvent) {
+        val taskService = taskServiceProvider()
+        e.presentation.isEnabled = taskService.canUndo()
+        val description = taskService.getUndoDescription()
+        e.presentation.text = if (description != null) "Undo: $description" else "Undo"
+    }
+
+    override fun getActionUpdateThread() = ActionUpdateThread.EDT
+}
+
+/**
+ * Action to redo the last undone operation.
+ */
+class RedoAction(
+    private val taskServiceProvider: () -> TaskService
+) : AnAction("Redo", "Redo last undone action", AllIcons.Actions.Redo) {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        taskServiceProvider().redo()
+    }
+
+    override fun update(e: AnActionEvent) {
+        val taskService = taskServiceProvider()
+        e.presentation.isEnabled = taskService.canRedo()
+        val description = taskService.getRedoDescription()
+        e.presentation.text = if (description != null) "Redo: $description" else "Redo"
+    }
+
+    override fun getActionUpdateThread() = ActionUpdateThread.EDT
+}

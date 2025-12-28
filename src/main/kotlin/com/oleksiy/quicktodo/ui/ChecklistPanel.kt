@@ -6,7 +6,9 @@ import com.oleksiy.quicktodo.action.ClearCompletedAction
 import com.oleksiy.quicktodo.action.CollapseAllAction
 import com.oleksiy.quicktodo.action.ExpandAllAction
 import com.oleksiy.quicktodo.action.MoveTaskAction
+import com.oleksiy.quicktodo.action.RedoAction
 import com.oleksiy.quicktodo.action.ToggleHideCompletedAction
+import com.oleksiy.quicktodo.action.UndoAction
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
@@ -14,6 +16,7 @@ import com.oleksiy.quicktodo.ui.dnd.TaskDragDropHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
@@ -102,6 +105,9 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private fun setupRightToolbar(decoratorPanel: JPanel) {
         val rightActionGroup = DefaultActionGroup(
+            UndoAction { taskService },
+            RedoAction { taskService },
+            Separator.getInstance(),
             ExpandAllAction(this),
             CollapseAllAction(this),
             ToggleHideCompletedAction(this),
@@ -205,7 +211,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private fun setupKeyboardShortcuts(tree: CheckboxTree) {
         val undoAction = object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent?) {
-                taskService.undoRemoveTask()
+                taskService.undo()
+            }
+        }
+        val redoAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                taskService.redo()
             }
         }
         val copyAction = object : AbstractAction() {
@@ -217,13 +228,23 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             }
         }
         tree.getInputMap(JComponent.WHEN_FOCUSED).apply {
-            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undoRemoveTask")
-            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK), "undoRemoveTask")
+            // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undoTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK), "undoTask")
+            // Redo: Ctrl+Shift+Z (Windows/Linux) or Cmd+Shift+Z (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "redoTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "redoTask")
+            // Also Ctrl+Y for redo on Windows/Linux
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, KeyEvent.CTRL_DOWN_MASK), "redoTask")
+            // Copy
             put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.CTRL_DOWN_MASK), "copyTaskText")
             put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.META_DOWN_MASK), "copyTaskText")
         }
-        tree.actionMap.put("undoRemoveTask", undoAction)
-        tree.actionMap.put("copyTaskText", copyAction)
+        tree.actionMap.apply {
+            put("undoTask", undoAction)
+            put("redoTask", redoAction)
+            put("copyTaskText", copyAction)
+        }
     }
 
     private fun setupExpansionListener(tree: CheckboxTree) {

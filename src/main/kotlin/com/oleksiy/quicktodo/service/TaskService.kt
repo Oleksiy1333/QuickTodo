@@ -2,6 +2,7 @@ package com.oleksiy.quicktodo.service
 
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.undo.*
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -16,13 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList
     storages = [Storage("quicktodo.tasklist.xml")]
 )
 @Service(Service.Level.PROJECT)
-class TaskService : PersistentStateComponent<TaskService.State> {
-
-    data class RemovedTaskInfo(
-        val task: Task,
-        val parentId: String?,
-        val index: Int
-    )
+class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor {
 
     class State {
         @XCollection(propertyElementName = "tasks", elementName = "task")
@@ -36,12 +31,13 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     private var myState = State()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
-    private val undoStack = ArrayDeque<RemovedTaskInfo>()
+    private val undoRedoManager = UndoRedoManager(maxHistorySize = 25)
 
     override fun getState(): State = myState
 
     override fun loadState(state: State) {
         XmlSerializerUtil.copyBean(state, myState)
+        undoRedoManager.clearHistory()
         notifyListeners()
     }
 
@@ -63,9 +59,12 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         }
     }
 
+    // ============ Public API (creates undo commands) ============
+
     fun addTask(text: String, priority: Priority = Priority.NONE): Task {
         val task = Task(text = text, level = 0, priority = priority.name)
         myState.tasks.add(task)
+        undoRedoManager.recordCommand(AddTaskCommand(task.id, text, priority))
         notifyListeners()
         return task
     }
@@ -74,60 +73,50 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         val parent = findTask(parentId) ?: return null
         if (!parent.canAddSubtask()) return null
         val subtask = parent.addSubtask(text, priority)
+        undoRedoManager.recordCommand(AddSubtaskCommand(subtask.id, parentId, text, priority))
         notifyListeners()
         return subtask
     }
 
     fun removeTask(taskId: String): Boolean {
-        val result = findAndRemoveTask(myState.tasks, taskId, null, captureInfo = true)
-        if (result != null) {
-            undoStack.addLast(result)
+        val task = findTask(taskId) ?: return false
+        val parentId = findParentId(taskId)
+        val index = getTaskIndex(taskId, parentId)
+        val snapshot = TaskSnapshot.deepCopy(task)
+
+        val removed = removeTaskInternal(taskId)
+        if (removed) {
+            undoRedoManager.recordCommand(RemoveTaskCommand(snapshot, parentId, index))
             notifyListeners()
-            return true
         }
-        return false
+        return removed
     }
 
-    fun undoRemoveTask(): Boolean {
-        if (undoStack.isEmpty()) return false
+    fun setTaskCompletion(taskId: String, completed: Boolean): Boolean {
+        val task = findTask(taskId) ?: return false
 
-        val info = undoStack.removeLast()
+        // Capture states before change
+        val beforeStates = TaskSnapshot.captureCompletionStates(task)
 
-        if (info.parentId == null) {
-            // Restore to root level
-            val index = info.index.coerceIn(0, myState.tasks.size)
-            myState.tasks.add(index, info.task)
-        } else {
-            // Restore to parent
-            val parent = findTask(info.parentId)
-            if (parent != null) {
-                val index = info.index.coerceIn(0, parent.subtasks.size)
-                parent.subtasks.add(index, info.task)
-            } else {
-                // Parent no longer exists, add to root
-                myState.tasks.add(info.task)
-            }
-        }
+        // Check if any change will happen
+        val willChange = hasCompletionChange(task, completed)
+        if (!willChange) return true
+
+        // Apply changes
+        task.isCompleted = completed
+        setAllSubtasksCompletion(task, completed)
+
+        undoRedoManager.recordCommand(
+            SetTaskCompletionCommand(taskId, beforeStates, completed)
+        )
 
         notifyListeners()
         return true
     }
 
-    fun setTaskCompletion(taskId: String, completed: Boolean): Boolean {
-        val task = findTask(taskId) ?: return false
-        var changed = false
-        if (task.isCompleted != completed) {
-            task.isCompleted = completed
-            changed = true
-        }
-        // When checking/unchecking a parent, also check/uncheck all subtasks
-        if (task.subtasks.isNotEmpty()) {
-            changed = setAllSubtasksCompletion(task, completed) || changed
-        }
-        if (changed) {
-            notifyListeners()
-        }
-        return true
+    private fun hasCompletionChange(task: Task, newCompleted: Boolean): Boolean {
+        if (task.isCompleted != newCompleted) return true
+        return task.subtasks.any { hasCompletionChange(it, newCompleted) }
     }
 
     private fun setAllSubtasksCompletion(task: Task, completed: Boolean): Boolean {
@@ -144,20 +133,91 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     fun setTaskPriority(taskId: String, priority: Priority): Boolean {
         val task = findTask(taskId) ?: return false
-        if (task.getPriorityEnum() != priority) {
-            task.setPriorityEnum(priority)
-            notifyListeners()
-        }
+        val oldPriority = task.getPriorityEnum()
+
+        if (oldPriority == priority) return true
+
+        task.setPriorityEnum(priority)
+        undoRedoManager.recordCommand(SetTaskPriorityCommand(taskId, oldPriority, priority))
+        notifyListeners()
         return true
     }
 
-    fun clearCompletedTasks(): Int {
-        var count = 0
-        count += clearCompletedFromList(myState.tasks)
-        if (count > 0) {
+    fun updateTaskText(taskId: String, newText: String): Boolean {
+        val task = findTask(taskId) ?: return false
+        val oldText = task.text
+
+        if (oldText == newText) return true
+
+        task.text = newText
+        undoRedoManager.recordCommand(EditTaskTextCommand(taskId, oldText, newText))
+        notifyListeners()
+        return true
+    }
+
+    fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
+        return moveTasks(listOf(taskId), targetParentId, targetIndex)
+    }
+
+    fun moveTasks(taskIds: List<String>, targetParentId: String?, targetIndex: Int): Boolean {
+        if (taskIds.isEmpty()) return false
+
+        // Capture original positions before any changes
+        val moveInfos = taskIds.mapNotNull { taskId ->
+            val parentId = findParentId(taskId)
+            val index = getTaskIndex(taskId, parentId)
+            if (index >= 0) {
+                MoveTasksCommand.TaskMoveInfo(taskId, parentId, index)
+            } else null
+        }
+
+        if (moveInfos.size != taskIds.size) return false
+
+        // Execute the move
+        val result = moveTasksInternal(taskIds, targetParentId, targetIndex)
+
+        if (result) {
+            undoRedoManager.recordCommand(MoveTasksCommand(moveInfos, targetParentId, targetIndex))
             notifyListeners()
         }
+
+        return result
+    }
+
+    fun clearCompletedTasks(): Int {
+        // Capture all completed tasks before removal
+        val removedTasks = captureCompletedTasks(myState.tasks, null)
+
+        if (removedTasks.isEmpty()) return 0
+
+        val count = clearCompletedFromList(myState.tasks)
+
+        undoRedoManager.recordCommand(ClearCompletedTasksCommand(removedTasks))
+        notifyListeners()
         return count
+    }
+
+    private fun captureCompletedTasks(
+        tasks: List<Task>,
+        parentId: String?
+    ): List<ClearCompletedTasksCommand.RemovedTaskInfo> {
+        val result = mutableListOf<ClearCompletedTasksCommand.RemovedTaskInfo>()
+
+        tasks.forEachIndexed { index, task ->
+            if (task.isCompleted) {
+                result.add(
+                    ClearCompletedTasksCommand.RemovedTaskInfo(
+                        TaskSnapshot.deepCopy(task),
+                        parentId,
+                        index
+                    )
+                )
+            } else {
+                result.addAll(captureCompletedTasks(task.subtasks, task.id))
+            }
+        }
+
+        return result
     }
 
     private fun clearCompletedFromList(tasks: MutableList<Task>): Int {
@@ -181,18 +241,174 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         return count
     }
 
-    fun updateTaskText(taskId: String, newText: String): Boolean {
+    // ============ Undo/Redo API ============
+
+    fun undo(): Boolean {
+        return undoRedoManager.undo(this)
+    }
+
+    fun redo(): Boolean {
+        return undoRedoManager.redo(this)
+    }
+
+    fun canUndo(): Boolean = undoRedoManager.canUndo()
+    fun canRedo(): Boolean = undoRedoManager.canRedo()
+
+    fun getUndoDescription(): String? = undoRedoManager.getUndoDescription()
+    fun getRedoDescription(): String? = undoRedoManager.getRedoDescription()
+
+    fun addUndoRedoListener(listener: UndoRedoManager.UndoRedoListener) {
+        undoRedoManager.addListener(listener)
+    }
+
+    fun removeUndoRedoListener(listener: UndoRedoManager.UndoRedoListener) {
+        undoRedoManager.removeListener(listener)
+    }
+
+    // ============ CommandExecutor Implementation ============
+
+    override fun addTaskWithoutUndo(taskId: String, text: String, priority: Priority): Task {
+        val task = Task(id = taskId, text = text, level = 0, priority = priority.name)
+        myState.tasks.add(task)
+        notifyListeners()
+        return task
+    }
+
+    override fun addSubtaskWithoutUndo(
+        subtaskId: String,
+        parentId: String,
+        text: String,
+        priority: Priority
+    ): Task? {
+        val parent = findTask(parentId) ?: return null
+        if (!parent.canAddSubtask()) return null
+
+        val subtask = Task(
+            id = subtaskId,
+            text = text,
+            level = parent.level + 1,
+            priority = priority.name
+        )
+        parent.subtasks.add(subtask)
+        notifyListeners()
+        return subtask
+    }
+
+    override fun removeTaskWithoutUndo(taskId: String): Boolean {
+        val result = removeTaskInternal(taskId)
+        if (result) notifyListeners()
+        return result
+    }
+
+    override fun updateTaskTextWithoutUndo(taskId: String, newText: String): Boolean {
         val task = findTask(taskId) ?: return false
         task.text = newText
         notifyListeners()
         return true
     }
 
-    fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
-        return moveTasks(listOf(taskId), targetParentId, targetIndex)
+    override fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean {
+        val task = findTask(taskId) ?: return false
+        task.isCompleted = completed
+        setAllSubtasksCompletion(task, completed)
+        notifyListeners()
+        return true
     }
 
-    fun moveTasks(taskIds: List<String>, targetParentId: String?, targetIndex: Int): Boolean {
+    override fun setTaskPriorityWithoutUndo(taskId: String, priority: Priority): Boolean {
+        val task = findTask(taskId) ?: return false
+        task.setPriorityEnum(priority)
+        notifyListeners()
+        return true
+    }
+
+    override fun moveTaskWithoutUndo(
+        taskId: String,
+        targetParentId: String?,
+        targetIndex: Int
+    ): Boolean {
+        val result = moveTasksInternal(listOf(taskId), targetParentId, targetIndex)
+        if (result) notifyListeners()
+        return result
+    }
+
+    override fun moveTasksWithoutUndo(
+        taskIds: List<String>,
+        targetParentId: String?,
+        targetIndex: Int
+    ): Boolean {
+        val result = moveTasksInternal(taskIds, targetParentId, targetIndex)
+        if (result) notifyListeners()
+        return result
+    }
+
+    override fun clearCompletedTasksWithoutUndo(): Int {
+        val count = clearCompletedFromList(myState.tasks)
+        if (count > 0) notifyListeners()
+        return count
+    }
+
+    override fun restoreTask(taskSnapshot: Task, parentId: String?, index: Int) {
+        val copy = TaskSnapshot.deepCopy(taskSnapshot)
+
+        if (parentId == null) {
+            val insertIndex = index.coerceIn(0, myState.tasks.size)
+            myState.tasks.add(insertIndex, copy)
+        } else {
+            val parent = findTask(parentId)
+            if (parent != null) {
+                val insertIndex = index.coerceIn(0, parent.subtasks.size)
+                parent.subtasks.add(insertIndex, copy)
+            } else {
+                // Parent no longer exists, add to root
+                myState.tasks.add(copy)
+            }
+        }
+        notifyListeners()
+    }
+
+    override fun restoreCompletionStates(states: Map<String, Boolean>) {
+        states.forEach { (taskId, completed) ->
+            findTask(taskId)?.isCompleted = completed
+        }
+        notifyListeners()
+    }
+
+    // ============ Helper Methods ============
+
+    private fun getTaskIndex(taskId: String, parentId: String?): Int {
+        val siblings = if (parentId == null) {
+            myState.tasks
+        } else {
+            findTask(parentId)?.subtasks ?: return -1
+        }
+        return siblings.indexOfFirst { it.id == taskId }
+    }
+
+    private fun removeTaskInternal(taskId: String): Boolean {
+        return removeTaskFromList(myState.tasks, taskId)
+    }
+
+    private fun removeTaskFromList(tasks: MutableList<Task>, taskId: String): Boolean {
+        val iterator = tasks.iterator()
+        while (iterator.hasNext()) {
+            val task = iterator.next()
+            if (task.id == taskId) {
+                iterator.remove()
+                return true
+            }
+            if (removeTaskFromList(task.subtasks, taskId)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun moveTasksInternal(
+        taskIds: List<String>,
+        targetParentId: String?,
+        targetIndex: Int
+    ): Boolean {
         if (taskIds.isEmpty()) return false
 
         // Collect all tasks to move (in order)
@@ -201,7 +417,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
         // Remove all tasks from their current locations
         for (taskId in taskIds) {
-            findAndRemoveTask(myState.tasks, taskId, null, captureInfo = false) ?: return false
+            if (!removeTaskInternal(taskId)) return false
         }
 
         // Insert at new location
@@ -227,7 +443,6 @@ class TaskService : PersistentStateComponent<TaskService.State> {
             }
         }
 
-        notifyListeners()
         return true
     }
 
@@ -236,39 +451,6 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         task.subtasks.forEach { subtask ->
             updateSubtaskLevels(subtask, parentLevel + 1)
         }
-    }
-
-    /**
-     * Generic tree traversal that finds and removes a task.
-     * @param tasks The list to search in
-     * @param taskId The ID of the task to find and remove
-     * @param parentId The ID of the parent (null for root level)
-     * @param captureInfo Whether to capture removal info for undo
-     * @return RemovedTaskInfo if found and removed (when captureInfo=true),
-     *         or a dummy RemovedTaskInfo (when captureInfo=false and found),
-     *         or null if not found
-     */
-    private fun findAndRemoveTask(
-        tasks: MutableList<Task>,
-        taskId: String,
-        parentId: String?,
-        captureInfo: Boolean
-    ): RemovedTaskInfo? {
-        for (i in tasks.indices) {
-            val task = tasks[i]
-            if (task.id == taskId) {
-                tasks.removeAt(i)
-                return if (captureInfo) {
-                    RemovedTaskInfo(task, parentId, i)
-                } else {
-                    // Return a dummy info to indicate success
-                    RemovedTaskInfo(task, null, 0)
-                }
-            }
-            val result = findAndRemoveTask(task.subtasks, taskId, task.id, captureInfo)
-            if (result != null) return result
-        }
-        return null
     }
 
     fun findTask(taskId: String): Task? {
