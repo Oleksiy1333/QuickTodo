@@ -29,6 +29,8 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
         @XCollection(propertyElementName = "expandedTaskIds", elementName = "id")
         var expandedTaskIds: MutableSet<String> = mutableSetOf()
+
+        var hideCompleted: Boolean = false
     }
 
     private var myState = State()
@@ -49,6 +51,15 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     fun setExpandedTaskIds(ids: Set<String>) {
         myState.expandedTaskIds.clear()
         myState.expandedTaskIds.addAll(ids)
+    }
+
+    fun isHideCompleted(): Boolean = myState.hideCompleted
+
+    fun setHideCompleted(hide: Boolean) {
+        if (myState.hideCompleted != hide) {
+            myState.hideCompleted = hide
+            notifyListeners()
+        }
     }
 
     fun addTask(text: String, priority: Priority = Priority.NONE): Task {
@@ -103,11 +114,31 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     fun setTaskCompletion(taskId: String, completed: Boolean): Boolean {
         val task = findTask(taskId) ?: return false
+        var changed = false
         if (task.isCompleted != completed) {
             task.isCompleted = completed
+            changed = true
+        }
+        // When checking/unchecking a parent, also check/uncheck all subtasks
+        if (task.subtasks.isNotEmpty()) {
+            changed = setAllSubtasksCompletion(task, completed) || changed
+        }
+        if (changed) {
             notifyListeners()
         }
         return true
+    }
+
+    private fun setAllSubtasksCompletion(task: Task, completed: Boolean): Boolean {
+        var changed = false
+        for (subtask in task.subtasks) {
+            if (subtask.isCompleted != completed) {
+                subtask.isCompleted = completed
+                changed = true
+            }
+            changed = setAllSubtasksCompletion(subtask, completed) || changed
+        }
+        return changed
     }
 
     fun setTaskPriority(taskId: String, priority: Priority): Boolean {

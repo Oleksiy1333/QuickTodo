@@ -38,8 +38,18 @@ class TaskTreeCellRenderer(
             textRenderer.isOpaque = true
         }
 
-        // Check if effectively completed: either directly checked or all children are checked
-        val isEffectivelyCompleted = node.isChecked || isAllChildrenChecked(node)
+        // Check if effectively completed:
+        // - For parents: only when ALL children are effectively completed
+        // - For leaves: when the task itself is completed
+        val isEffectivelyCompleted = if (node.childCount > 0) {
+            isAllChildrenChecked(node)
+        } else {
+            node.isChecked
+        }
+
+        // Sync checkbox visual with effective completion state
+        myCheckbox.isSelected = isEffectivelyCompleted
+
         val textAttributes = when {
             isEffectivelyCompleted -> SimpleTextAttributes(
                 SimpleTextAttributes.STYLE_STRIKEOUT,

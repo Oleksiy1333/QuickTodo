@@ -14,41 +14,67 @@ class TaskTreeManager(
     private val tree: JTree,
     private val taskService: TaskService
 ) {
+    private var isRefreshing = false
+    private var hasLoadedOnce = false
+
+    /**
+     * Returns true if the tree is currently being refreshed.
+     * Used to suppress expansion state saving during programmatic changes.
+     */
+    fun isRefreshing(): Boolean = isRefreshing
 
     /**
      * Refreshes the tree with current tasks, preserving expansion state.
      */
     fun refreshTree() {
-        val currentExpandedIds = getExpandedTaskIdsFromTree()
-        val persistedExpandedIds = taskService.getExpandedTaskIds()
-        val expandedTaskIds = currentExpandedIds + persistedExpandedIds
-        val isFirstLoad = expandedTaskIds.isEmpty() && taskService.getTasks().isNotEmpty()
+        isRefreshing = true
+        try {
+            val currentExpandedIds = getExpandedTaskIdsFromTree()
+            val persistedExpandedIds = taskService.getExpandedTaskIds()
+            val expandedTaskIds = currentExpandedIds + persistedExpandedIds
+            val isFirstLoad = !hasLoadedOnce && expandedTaskIds.isEmpty() && taskService.getTasks().isNotEmpty()
 
-        val tasks = taskService.getTasks()
-        val rootNode = CheckedTreeNode("Tasks")
+            val tasks = taskService.getTasks()
+            val hideCompleted = taskService.isHideCompleted()
+            val rootNode = CheckedTreeNode("Tasks")
 
-        tasks.forEach { task ->
-            rootNode.add(createTaskNode(task))
-        }
+            tasks.forEach { task ->
+                val node = createTaskNode(task, hideCompleted)
+                if (node != null) {
+                    rootNode.add(node)
+                }
+            }
 
-        tree.model = DefaultTreeModel(rootNode)
+            tree.model = DefaultTreeModel(rootNode)
 
-        if (isFirstLoad) {
-            expandAll()
-            saveExpandedState()
-        } else {
-            restoreExpandedState(expandedTaskIds)
+            if (isFirstLoad) {
+                expandAll()
+                saveExpandedState()
+            } else {
+                restoreExpandedState(expandedTaskIds)
+            }
+
+            hasLoadedOnce = true
+        } finally {
+            isRefreshing = false
         }
     }
 
     /**
      * Creates a tree node for a task and its subtasks recursively.
+     * Returns null if the task should be hidden (completed when hideCompleted is true).
      */
-    fun createTaskNode(task: Task): CheckedTreeNode {
+    private fun createTaskNode(task: Task, hideCompleted: Boolean): CheckedTreeNode? {
+        if (hideCompleted && task.isCompleted) {
+            return null
+        }
         val node = CheckedTreeNode(task)
         node.isChecked = task.isCompleted
         task.subtasks.forEach { subtask ->
-            node.add(createTaskNode(subtask))
+            val subtaskNode = createTaskNode(subtask, hideCompleted)
+            if (subtaskNode != null) {
+                node.add(subtaskNode)
+            }
         }
         return node
     }

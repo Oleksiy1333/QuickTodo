@@ -6,6 +6,7 @@ import com.oleksiy.quicktodo.action.ClearCompletedAction
 import com.oleksiy.quicktodo.action.CollapseAllAction
 import com.oleksiy.quicktodo.action.ExpandAllAction
 import com.oleksiy.quicktodo.action.MoveTaskAction
+import com.oleksiy.quicktodo.action.ToggleHideCompletedAction
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
@@ -33,6 +34,7 @@ import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.KeyStroke
+import javax.swing.SwingUtilities
 
 /**
  * Main panel for the QuickTodo checklist tool window.
@@ -102,6 +104,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val rightActionGroup = DefaultActionGroup(
             ExpandAllAction(this),
             CollapseAllAction(this),
+            ToggleHideCompletedAction(this),
             ClearCompletedAction(this)
         )
         val rightToolbar = ActionManager.getInstance()
@@ -225,11 +228,17 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private fun setupExpansionListener(tree: CheckboxTree) {
         tree.addTreeExpansionListener(object : javax.swing.event.TreeExpansionListener {
-            override fun treeExpanded(event: javax.swing.event.TreeExpansionEvent) =
-                treeManager.saveExpandedState()
+            override fun treeExpanded(event: javax.swing.event.TreeExpansionEvent) {
+                if (!treeManager.isRefreshing()) {
+                    treeManager.saveExpandedState()
+                }
+            }
 
-            override fun treeCollapsed(event: javax.swing.event.TreeExpansionEvent) =
-                treeManager.saveExpandedState()
+            override fun treeCollapsed(event: javax.swing.event.TreeExpansionEvent) {
+                if (!treeManager.isRefreshing()) {
+                    treeManager.saveExpandedState()
+                }
+            }
         })
     }
 
@@ -340,6 +349,14 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         }
     }
 
+    override fun isHideCompletedEnabled(): Boolean {
+        return taskService.isHideCompleted()
+    }
+
+    override fun toggleHideCompleted() {
+        taskService.setHideCompleted(!taskService.isHideCompleted())
+    }
+
     // ============ Task Operations ============
 
     private fun addTask() {
@@ -389,7 +406,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     // ============ Lifecycle ============
 
     private fun setupListeners() {
-        taskListener = { treeManager.refreshTree() }
+        taskListener = { SwingUtilities.invokeLater { treeManager.refreshTree() } }
         taskService.addListener(taskListener!!)
 
         focusListener = object : FocusService.FocusChangeListener {

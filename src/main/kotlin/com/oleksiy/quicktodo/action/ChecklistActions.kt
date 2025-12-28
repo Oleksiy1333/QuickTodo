@@ -23,6 +23,8 @@ interface ChecklistActionCallback {
     fun collapseAll()
     fun hasCompletedTasks(): Boolean
     fun clearCompletedTasks()
+    fun isHideCompletedEnabled(): Boolean
+    fun toggleHideCompleted()
 }
 
 /**
@@ -102,6 +104,28 @@ class ClearCompletedAction(
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = callback.hasCompletedTasks()
+    }
+
+    override fun getActionUpdateThread() = ActionUpdateThread.EDT
+}
+
+/**
+ * Action to toggle visibility of completed tasks.
+ */
+class ToggleHideCompletedAction(
+    private val callback: ChecklistActionCallback
+) : AnAction(), Toggleable {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        callback.toggleHideCompleted()
+    }
+
+    override fun update(e: AnActionEvent) {
+        val isHidden = callback.isHideCompletedEnabled()
+        e.presentation.text = if (isHidden) "Show Completed" else "Hide Completed"
+        e.presentation.description = if (isHidden) "Show completed tasks" else "Hide completed tasks"
+        e.presentation.icon = if (isHidden) AllIcons.Actions.Show else AllIcons.Actions.ToggleVisibility
+        Toggleable.setSelected(e.presentation, isHidden)
     }
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
