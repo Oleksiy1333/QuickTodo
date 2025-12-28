@@ -9,6 +9,7 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.util.xmlb.annotations.XCollection
+import java.util.concurrent.CopyOnWriteArrayList
 
 @State(
     name = "com.oleksiy.quicktodo.TaskService",
@@ -34,7 +35,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     }
 
     private var myState = State()
-    private val listeners = mutableListOf<() -> Unit>()
+    private val listeners = CopyOnWriteArrayList<() -> Unit>()
     private val undoStack = ArrayDeque<RemovedTaskInfo>()
 
     override fun getState(): State = myState

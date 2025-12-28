@@ -4,6 +4,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.oleksiy.quicktodo.model.TimerState
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.Timer
 
 @Service(Service.Level.PROJECT)
@@ -17,7 +18,7 @@ class FocusService(private val project: Project) : Disposable {
     private var focusedTaskId: String? = null
     private val timerStates: MutableMap<String, TimerState> = mutableMapOf()
     private var updateTimer: Timer? = null
-    private val listeners = mutableListOf<FocusChangeListener>()
+    private val listeners = CopyOnWriteArrayList<FocusChangeListener>()
 
     private val taskService: TaskService
         get() = TaskService.getInstance(project)
