@@ -144,8 +144,33 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val policy = CheckboxTreeBase.CheckPolicy(false, false, false, false)
 
         val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks"), policy) {
+            // Track which task's checkbox was directly clicked by the user.
+            // This prevents CheckboxTree's auto-calculated state changes from affecting other tasks.
+            private var directlyClickedTaskId: String? = null
+
+            override fun processMouseEvent(e: java.awt.event.MouseEvent) {
+                if (e.id == java.awt.event.MouseEvent.MOUSE_PRESSED && e.button == java.awt.event.MouseEvent.BUTTON1) {
+                    // Remember which task's checkbox the user is clicking
+                    val path = getPathForLocation(e.x, e.y)
+                    val node = path?.lastPathComponent as? CheckedTreeNode
+                    val task = node?.userObject as? Task
+                    directlyClickedTaskId = task?.id
+                }
+                super.processMouseEvent(e)
+                if (e.id == java.awt.event.MouseEvent.MOUSE_RELEASED) {
+                    directlyClickedTaskId = null
+                }
+            }
+
             override fun onNodeStateChanged(node: CheckedTreeNode) {
                 val task = node.userObject as? Task ?: return
+
+                // Only process state changes for the task that was directly clicked.
+                // CheckboxTree may call onNodeStateChanged for other nodes (parents/siblings)
+                // with auto-calculated states - we must ignore those.
+                if (directlyClickedTaskId != null && task.id != directlyClickedTaskId) {
+                    return
+                }
 
                 // Trigger animation before state change if completing
                 if (node.isChecked) {

@@ -48,20 +48,13 @@ class TaskTreeCellRenderer(
         val isAncestorOfFocused = isAncestorOfFocusedTask(task)
         val hasAccumulatedTime = focusService.hasAccumulatedTime(task.id)
 
-        // Check if effectively completed:
-        // - For parents: only when ALL children are effectively completed
-        // - For leaves: when the task itself is completed
-        val isEffectivelyCompleted = if (node.childCount > 0) {
-            isAllChildrenChecked(node)
-        } else {
-            node.isChecked
-        }
-
-        // Sync checkbox visual with effective completion state
-        checkbox.isSelected = isEffectivelyCompleted
+        // Task is completed only when explicitly marked as done
+        // Explicitly set checkbox state to override CheckboxTree's automatic parent state calculation
+        val isCompleted = node.isChecked
+        checkbox.isSelected = isCompleted
 
         val textAttributes = when {
-            isEffectivelyCompleted -> SimpleTextAttributes(
+            isCompleted -> SimpleTextAttributes(
                 SimpleTextAttributes.STYLE_STRIKEOUT,
                 SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
             )
@@ -136,17 +129,6 @@ class TaskTreeCellRenderer(
             total += nestedTotal
         }
         return Pair(completed, total)
-    }
-
-    private fun isAllChildrenChecked(node: CheckedTreeNode): Boolean {
-        if (node.childCount == 0) return false
-        for (i in 0 until node.childCount) {
-            val child = node.getChildAt(i) as? CheckedTreeNode ?: return false
-            if (!child.isChecked && !isAllChildrenChecked(child)) {
-                return false
-            }
-        }
-        return true
     }
 
     private fun isAncestorOfFocusedTask(task: Task): Boolean {

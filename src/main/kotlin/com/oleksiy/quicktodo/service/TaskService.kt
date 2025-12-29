@@ -96,16 +96,14 @@ class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor
     fun setTaskCompletion(taskId: String, completed: Boolean): Boolean {
         val task = findTask(taskId) ?: return false
 
-        // Capture states before change
-        val beforeStates = TaskSnapshot.captureCompletionStates(task)
-
         // Check if any change will happen
-        val willChange = hasCompletionChange(task, completed)
-        if (!willChange) return true
+        if (task.isCompleted == completed) return true
 
-        // Apply changes
+        // Capture state before change for undo
+        val beforeStates = mapOf(task.id to task.isCompleted)
+
+        // Apply change to this task only (no subtask propagation)
         task.isCompleted = completed
-        setAllSubtasksCompletion(task, completed)
 
         undoRedoManager.recordCommand(
             SetTaskCompletionCommand(taskId, beforeStates, completed)
@@ -113,23 +111,6 @@ class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor
 
         notifyListeners()
         return true
-    }
-
-    private fun hasCompletionChange(task: Task, newCompleted: Boolean): Boolean {
-        if (task.isCompleted != newCompleted) return true
-        return task.subtasks.any { hasCompletionChange(it, newCompleted) }
-    }
-
-    private fun setAllSubtasksCompletion(task: Task, completed: Boolean): Boolean {
-        var changed = false
-        for (subtask in task.subtasks) {
-            if (subtask.isCompleted != completed) {
-                subtask.isCompleted = completed
-                changed = true
-            }
-            changed = setAllSubtasksCompletion(subtask, completed) || changed
-        }
-        return changed
     }
 
     fun setTaskPriority(taskId: String, priority: Priority): Boolean {
@@ -327,7 +308,6 @@ class TaskService : PersistentStateComponent<TaskService.State>, CommandExecutor
     override fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean {
         val task = findTask(taskId) ?: return false
         task.isCompleted = completed
-        setAllSubtasksCompletion(task, completed)
         notifyListeners()
         return true
     }
