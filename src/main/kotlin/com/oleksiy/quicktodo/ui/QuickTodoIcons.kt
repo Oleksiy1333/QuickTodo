@@ -17,6 +17,9 @@ object QuickTodoIcons {
     @JvmField
     val Focus: Icon = IconLoader.getIcon("/icons/focus.svg", javaClass)
 
+    @JvmField
+    val TaskMarker: Icon = IconLoader.getIcon("/icons/checklist.svg", javaClass)
+
     fun getIconForPriority(priority: Priority): Icon? {
         return when (priority) {
             Priority.HIGH -> FlagHigh

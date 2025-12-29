@@ -45,6 +45,12 @@ import javax.swing.SwingUtilities
  */
 class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Disposable {
 
+    companion object {
+        private val instances = mutableMapOf<Project, ChecklistPanel>()
+
+        fun getInstance(project: Project): ChecklistPanel? = instances[project]
+    }
+
     private val taskService = TaskService.getInstance(project)
     private val focusService = FocusService.getInstance(project)
     private lateinit var tree: CheckboxTree
@@ -57,6 +63,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private var focusListener: FocusService.FocusChangeListener? = null
 
     init {
+        instances[project] = this
         setupUI()
         setupListeners()
     }
@@ -575,6 +582,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     override fun dispose() {
+        instances.remove(project)
         taskListener?.let { taskService.removeListener(it) }
         taskListener = null
         focusListener?.let { focusService.removeListener(it) }
@@ -583,4 +591,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     fun getContent(): JPanel = mainPanel
+
+    /**
+     * Selects a task by ID and scrolls to make it visible.
+     * Used for navigation from gutter icons.
+     */
+    fun selectTaskById(taskId: String) {
+        treeManager.selectTaskById(taskId)
+    }
 }
