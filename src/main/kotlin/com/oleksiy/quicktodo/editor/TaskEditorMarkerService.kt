@@ -125,13 +125,14 @@ class TaskEditorMarkerService(private val project: Project) : Disposable {
 
     /**
      * Finds all tasks that have a code location matching the given file path.
+     * Only includes incomplete tasks - completed tasks don't show gutter icons.
      */
     private fun getTasksForFile(relativePath: String): List<Task> {
         val result = mutableListOf<Task>()
 
         fun collectTasks(tasks: List<Task>) {
             for (task in tasks) {
-                if (task.codeLocation?.relativePath == relativePath) {
+                if (task.codeLocation?.relativePath == relativePath && !task.isCompleted) {
                     result.add(task)
                 }
                 collectTasks(task.subtasks)
