@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.oleksiy"
-version = "1.1"
+version = "1.0.3"
 
 repositories {
     mavenCentral()

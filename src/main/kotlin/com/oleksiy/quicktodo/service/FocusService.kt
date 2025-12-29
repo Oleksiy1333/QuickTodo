@@ -57,6 +57,30 @@ class FocusService(private val project: Project) : Disposable {
         notifyFocusChanged()
     }
 
+    fun pauseFocus() {
+        val taskId = focusedTaskId ?: return
+        if (timerStates[taskId] != TimerState.RUNNING) return
+
+        pauseTimer(taskId)
+        pauseParentTimers(taskId)
+        stopSwingTimer()
+        notifyFocusChanged()
+    }
+
+    fun resumeFocus() {
+        val taskId = focusedTaskId ?: return
+        if (timerStates[taskId] != TimerState.PAUSED) return
+
+        startTimer(taskId)
+        startParentTimers(taskId)
+        startSwingTimer()
+        notifyFocusChanged()
+    }
+
+    fun isPaused(): Boolean = focusedTaskId?.let { timerStates[it] == TimerState.PAUSED } ?: false
+
+    fun isRunning(): Boolean = focusedTaskId?.let { timerStates[it] == TimerState.RUNNING } ?: false
+
     fun onTaskCompleted(taskId: String) {
         val currentFocusId = focusedTaskId ?: return
 

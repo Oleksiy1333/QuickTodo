@@ -1,5 +1,6 @@
 package com.oleksiy.quicktodo.ui
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBColor
@@ -9,7 +10,10 @@ import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
 import java.awt.BorderLayout
 import java.awt.Color
-import java.awt.FlowLayout
+import java.awt.Dimension
+import javax.swing.Box
+import javax.swing.BoxLayout
+import javax.swing.JButton
 import javax.swing.JPanel
 import javax.swing.border.CompoundBorder
 
@@ -22,6 +26,8 @@ class FocusBarPanel(
 
     private val focusLabel = JBLabel()
     private val timerLabel = JBLabel()
+    private val pauseResumeButton = JButton()
+    private val stopButton = JButton()
 
     init {
         isVisible = false
@@ -31,14 +37,26 @@ class FocusBarPanel(
             JBUI.Borders.empty(6, 10)
         )
 
-        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+        val leftPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
             isOpaque = false
+            focusLabel.alignmentY = CENTER_ALIGNMENT
             add(focusLabel)
         }
 
-        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply {
+        setupButtons()
+
+        val rightPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
             isOpaque = false
+            timerLabel.alignmentY = CENTER_ALIGNMENT
+            pauseResumeButton.alignmentY = CENTER_ALIGNMENT
+            stopButton.alignmentY = CENTER_ALIGNMENT
             add(timerLabel)
+            add(Box.createHorizontalStrut(8))
+            add(pauseResumeButton)
+            add(Box.createHorizontalStrut(4))
+            add(stopButton)
         }
 
         add(leftPanel, BorderLayout.CENTER)
@@ -46,6 +64,36 @@ class FocusBarPanel(
 
         focusService.addListener(this)
         updateDisplay()
+    }
+
+    private fun setupButtons() {
+        pauseResumeButton.apply {
+            icon = AllIcons.Actions.Pause
+            isBorderPainted = false
+            isContentAreaFilled = false
+            isFocusPainted = false
+            preferredSize = Dimension(24, 24)
+            toolTipText = "Pause timer"
+            addActionListener {
+                if (focusService.isRunning()) {
+                    focusService.pauseFocus()
+                } else if (focusService.isPaused()) {
+                    focusService.resumeFocus()
+                }
+            }
+        }
+
+        stopButton.apply {
+            icon = AllIcons.Actions.Suspend
+            isBorderPainted = false
+            isContentAreaFilled = false
+            isFocusPainted = false
+            preferredSize = Dimension(24, 24)
+            toolTipText = "Stop timer and remove focus"
+            addActionListener {
+                focusService.removeFocus()
+            }
+        }
     }
 
     override fun onFocusChanged(focusedTaskId: String?) {
@@ -71,10 +119,24 @@ class FocusBarPanel(
 
         isVisible = true
 
-        focusLabel.text = "${task.text}"
+        focusLabel.text = task.text
         focusLabel.icon = QuickTodoIcons.Focus
 
         updateTimerDisplay()
+        updateButtonStates()
+    }
+
+    private fun updateButtonStates() {
+        when {
+            focusService.isRunning() -> {
+                pauseResumeButton.icon = AllIcons.Actions.Pause
+                pauseResumeButton.toolTipText = "Pause timer"
+            }
+            focusService.isPaused() -> {
+                pauseResumeButton.icon = AllIcons.Actions.Resume
+                pauseResumeButton.toolTipText = "Resume timer"
+            }
+        }
     }
 
     private fun updateTimerDisplay() {
