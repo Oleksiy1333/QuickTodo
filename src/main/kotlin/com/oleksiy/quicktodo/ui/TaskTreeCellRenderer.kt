@@ -3,16 +3,28 @@ package com.oleksiy.quicktodo.ui
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.FocusService
-import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
+import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
-import java.awt.Color
+import com.intellij.util.ui.UIUtil
+import java.awt.BorderLayout
+import java.awt.Component
+import javax.swing.JCheckBox
+import javax.swing.JPanel
 import javax.swing.JTree
+import javax.swing.tree.TreeCellRenderer
 
+/**
+ * Custom cell renderer for TaskTree.
+ * Renders each task with a checkbox, text, progress indicator, timer, priority icon, and code location link.
+ */
 class TaskTreeCellRenderer(
     private val focusService: FocusService
-) : CheckboxTree.CheckboxTreeCellRenderer() {
+) : JPanel(BorderLayout()), TreeCellRenderer {
+
+    private val checkbox = JCheckBox()
+    private val textRenderer = SimpleColoredComponent()
 
     // Track location link text for click detection
     var textBeforeLink: String = ""
@@ -23,35 +35,59 @@ class TaskTreeCellRenderer(
     // Track hovered row for highlight
     var hoveredRow: Int = -1
 
-    override fun customizeRenderer(
-        tree: JTree?,
+    init {
+        isOpaque = false
+        checkbox.isOpaque = false
+        textRenderer.isOpaque = false
+
+        add(checkbox, BorderLayout.WEST)
+        add(textRenderer, BorderLayout.CENTER)
+    }
+
+    override fun getTreeCellRendererComponent(
+        tree: JTree,
         value: Any?,
         selected: Boolean,
         expanded: Boolean,
         leaf: Boolean,
         row: Int,
         hasFocus: Boolean
-    ) {
-        val node = value as? CheckedTreeNode ?: return
-        val task = node.userObject as? Task ?: run {
-            textRenderer.append(node.userObject?.toString() ?: "Tasks")
-            return
+    ): Component {
+        // Reset state
+        textRenderer.clear()
+        textRenderer.icon = null
+        textBeforeLink = ""
+        linkText = ""
+
+        val node = value as? CheckedTreeNode
+        val task = node?.userObject as? Task
+
+        if (task == null) {
+            // Root node or non-task node
+            textRenderer.append(node?.userObject?.toString() ?: "Tasks")
+            checkbox.isVisible = false
+            background = null
+            return this
         }
 
-        // Apply hover highlight (subtle background when not selected)
-        if (!selected && row == hoveredRow) {
-            val hoverColor = JBUI.CurrentTheme.List.Hover.background(true)
-            textRenderer.background = hoverColor
-        }
+        checkbox.isVisible = true
 
+        // Set background based on selection/hover state
+        background = when {
+            selected -> UIUtil.getTreeSelectionBackground(hasFocus)
+            row == hoveredRow -> JBUI.CurrentTheme.List.Hover.background(true)
+            else -> null
+        }
+        isOpaque = selected || row == hoveredRow
+
+        // Set checkbox state from node
+        checkbox.isSelected = node.isChecked
+
+        // Determine text style based on task state
         val isFocused = focusService.isFocused(task.id)
         val isAncestorOfFocused = isAncestorOfFocusedTask(task)
         val hasAccumulatedTime = focusService.hasAccumulatedTime(task.id)
-
-        // Task is completed only when explicitly marked as done
-        // Explicitly set checkbox state to override CheckboxTree's automatic parent state calculation
         val isCompleted = node.isChecked
-        checkbox.isSelected = isCompleted
 
         val textAttributes = when {
             isCompleted -> SimpleTextAttributes(
@@ -65,6 +101,7 @@ class TaskTreeCellRenderer(
             else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
         }
 
+        // Render task text
         textRenderer.append(task.text, textAttributes)
 
         // Show completion progress for parent tasks (e.g., "2/5")
@@ -76,10 +113,6 @@ class TaskTreeCellRenderer(
                 SimpleTextAttributes.GRAYED_ATTRIBUTES
             )
         }
-
-        // Reset link tracking
-        textBeforeLink = ""
-        linkText = ""
 
         // Show timer if has accumulated time
         if (hasAccumulatedTime) {
@@ -101,9 +134,8 @@ class TaskTreeCellRenderer(
             }
         }
 
-        // Show linked file location at the end, right-aligned with padding
+        // Show linked file location at the end
         if (task.hasCodeLocation()) {
-            // Add padding to push link towards the right
             textRenderer.append("        ", SimpleTextAttributes.REGULAR_ATTRIBUTES)
             textBeforeLink = textRenderer.toString()
             linkText = task.codeLocation!!.toDisplayString()
@@ -113,6 +145,8 @@ class TaskTreeCellRenderer(
             )
             textRenderer.append(linkText, linkAttributes)
         }
+
+        return this
     }
 
     private fun countCompletionProgress(task: Task): Pair<Int, Int> {
@@ -123,7 +157,6 @@ class TaskTreeCellRenderer(
             if (subtask.isCompleted) {
                 completed++
             }
-            // Count nested subtasks too
             val (nestedCompleted, nestedTotal) = countCompletionProgress(subtask)
             completed += nestedCompleted
             total += nestedTotal
@@ -133,7 +166,6 @@ class TaskTreeCellRenderer(
 
     private fun isAncestorOfFocusedTask(task: Task): Boolean {
         val focusedTaskId = focusService.getFocusedTaskId() ?: return false
-        // Check if focused task is in this task's subtree (but not the task itself)
         return task.id != focusedTaskId && task.findTask(focusedTaskId) != null
     }
 }

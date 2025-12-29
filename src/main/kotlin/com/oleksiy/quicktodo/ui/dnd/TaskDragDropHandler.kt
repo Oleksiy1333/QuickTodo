@@ -4,13 +4,13 @@ import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.TaskService
 import com.oleksiy.quicktodo.ui.ChecklistConstants
 import com.oleksiy.quicktodo.ui.DropPosition
-import com.intellij.ui.CheckboxTree
 import com.intellij.ui.CheckedTreeNode
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
 import java.awt.Rectangle
 import java.awt.dnd.*
+import javax.swing.JTree
 import javax.swing.Timer
 import javax.swing.tree.TreePath
 
@@ -20,7 +20,7 @@ private typealias TaskList = List<Task>
  * Handles all drag and drop operations for the task tree.
  */
 class TaskDragDropHandler(
-    private val tree: CheckboxTree,
+    private val tree: JTree,
     private val taskService: TaskService,
     private val onTaskMoved: (taskId: String) -> Unit,
     private val ensureTaskExpanded: (taskId: String) -> Unit

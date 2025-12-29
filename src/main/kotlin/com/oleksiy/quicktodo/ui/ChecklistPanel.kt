@@ -21,21 +21,22 @@ import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
 import com.intellij.openapi.ui.Messages
-import com.intellij.ui.CheckboxTree
-import com.intellij.ui.CheckboxTreeBase
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Graphics
+import java.awt.Graphics2D
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.event.MouseMotionAdapter
 import javax.swing.AbstractAction
 import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTree
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 
@@ -53,7 +54,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private val taskService = TaskService.getInstance(project)
     private val focusService = FocusService.getInstance(project)
-    private lateinit var tree: CheckboxTree
+    private lateinit var tree: TaskTree
+    private lateinit var renderer: TaskTreeCellRenderer
     private lateinit var treeManager: TaskTreeManager
     private lateinit var dragDropHandler: TaskDragDropHandler
     private lateinit var contextMenuBuilder: TaskContextMenuBuilder
@@ -70,7 +72,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun setupUI() {
-        tree = createCheckboxTree()
+        tree = createTaskTree()
         animationService.setRepaintCallback { tree.repaint() }
         treeManager = TaskTreeManager(tree, taskService)
         dragDropHandler = TaskDragDropHandler(
@@ -139,57 +141,16 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         decoratorPanel.add(toolbarRowPanel, BorderLayout.NORTH)
     }
 
-    private fun createCheckboxTree(): CheckboxTree {
-        val renderer = TaskTreeCellRenderer(focusService)
-        val policy = CheckboxTreeBase.CheckPolicy(false, false, false, false)
+    private fun createTaskTree(): TaskTree {
+        renderer = TaskTreeCellRenderer(focusService)
 
-        val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks"), policy) {
-            // Track which task's checkbox was directly clicked by the user.
-            // This prevents CheckboxTree's auto-calculated state changes from affecting other tasks.
-            private var directlyClickedTaskId: String? = null
-
-            override fun processMouseEvent(e: java.awt.event.MouseEvent) {
-                if (e.id == java.awt.event.MouseEvent.MOUSE_PRESSED && e.button == java.awt.event.MouseEvent.BUTTON1) {
-                    // Remember which task's checkbox the user is clicking
-                    val path = getPathForLocation(e.x, e.y)
-                    val node = path?.lastPathComponent as? CheckedTreeNode
-                    val task = node?.userObject as? Task
-                    directlyClickedTaskId = task?.id
-                }
-                super.processMouseEvent(e)
-                if (e.id == java.awt.event.MouseEvent.MOUSE_RELEASED) {
-                    directlyClickedTaskId = null
-                }
-            }
-
-            override fun onNodeStateChanged(node: CheckedTreeNode) {
-                val task = node.userObject as? Task ?: return
-
-                // Only process state changes for the task that was directly clicked.
-                // CheckboxTree may call onNodeStateChanged for other nodes (parents/siblings)
-                // with auto-calculated states - we must ignore those.
-                if (directlyClickedTaskId != null && task.id != directlyClickedTaskId) {
-                    return
-                }
-
-                // Trigger animation before state change if completing
-                if (node.isChecked) {
-                    val row = getRowForPath(javax.swing.tree.TreePath(node.path))
-                    if (row >= 0) {
-                        getRowBounds(row)?.let { bounds ->
-                            animationService.startAnimation(task.id, bounds)
-                        }
-                    }
-                }
-
-                taskService.setTaskCompletion(task.id, node.isChecked)
-                if (node.isChecked) {
-                    focusService.onTaskCompleted(task.id)
-                }
-            }
-
+        val taskTree = object : TaskTree(
+            onTaskToggled = { task, isChecked -> handleTaskToggled(task, isChecked) }
+        ) {
             override fun paintComponent(g: Graphics) {
                 super.paintComponent(g)
+
+                // Paint drop indicator during drag
                 if (dragDropHandler.dropTargetRow >= 0 &&
                     dragDropHandler.dropPosition != DropPosition.NONE
                 ) {
@@ -202,60 +163,94 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
                 // Paint checkmark animations
                 if (animationService.hasActiveAnimations()) {
-                    val g2 = g as? java.awt.Graphics2D ?: return
+                    val g2 = g as? Graphics2D ?: return
                     for ((_, state) in animationService.getActiveAnimations()) {
                         CheckmarkPainter.paint(g2, state.bounds, state.getProgress())
                     }
                 }
             }
 
-            // Tooltip for location links - shows full path
             override fun getToolTipText(event: MouseEvent): String? {
                 val path = getPathForLocation(event.x, event.y) ?: return null
                 val node = path.lastPathComponent as? CheckedTreeNode ?: return null
                 val task = node.userObject as? Task ?: return null
 
-                if (task.hasCodeLocation() && isMouseOverLocationLink(event, this)) {
+                if (task.hasCodeLocation() && isMouseOverLocationLink(event)) {
                     return task.codeLocation?.relativePath
                 }
                 return null
             }
         }
 
+        taskTree.cellRenderer = renderer
+        taskTree.isRootVisible = false
+        taskTree.showsRootHandles = true
+
         // Enable tooltips
-        javax.swing.ToolTipManager.sharedInstance().registerComponent(checkboxTree)
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(taskTree)
 
-        setupMouseListeners(checkboxTree)
-        setupKeyboardShortcuts(checkboxTree)
-        setupExpansionListener(checkboxTree)
+        setupMouseListeners(taskTree)
+        setupKeyboardShortcuts(taskTree)
+        setupExpansionListener(taskTree)
 
-        checkboxTree.dragEnabled = true
-        checkboxTree.dropMode = DropMode.ON_OR_INSERT
+        taskTree.dragEnabled = true
+        taskTree.dropMode = DropMode.ON_OR_INSERT
 
-        return checkboxTree
+        return taskTree
     }
 
-    private fun setupMouseListeners(tree: CheckboxTree) {
+    /**
+     * Handle task checkbox toggle from TaskTree.
+     */
+    private fun handleTaskToggled(task: Task, isChecked: Boolean) {
+        // Trigger animation before state change if completing
+        if (isChecked) {
+            val path = treeManager.findPathToTask(
+                tree.model.root as CheckedTreeNode,
+                task.id
+            )
+            if (path != null) {
+                val row = tree.getRowForPath(path)
+                if (row >= 0) {
+                    tree.getRowBounds(row)?.let { bounds ->
+                        animationService.startAnimation(task.id, bounds)
+                    }
+                }
+            }
+        }
+
+        taskService.setTaskCompletion(task.id, isChecked)
+        if (isChecked) {
+            focusService.onTaskCompleted(task.id)
+        }
+    }
+
+    private fun setupMouseListeners(tree: TaskTree) {
         tree.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
+                // Skip if click was on checkbox (handled by TaskTree)
+                if (tree.isOverCheckbox(e.x, e.y)) {
+                    return
+                }
+
                 if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
-                    if (handleLocationClick(e, tree)) {
+                    if (handleLocationClick(e)) {
                         return
                     }
                 }
                 if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1) {
-                    handleDoubleClick(e, tree)
+                    handleDoubleClick(e)
                 }
             }
 
-            override fun mousePressed(e: MouseEvent) = maybeShowContextMenu(e, tree)
-            override fun mouseReleased(e: MouseEvent) = maybeShowContextMenu(e, tree)
+            override fun mousePressed(e: MouseEvent) = maybeShowContextMenu(e)
+            override fun mouseReleased(e: MouseEvent) = maybeShowContextMenu(e)
         })
 
-        // Add mouse motion listener for hand cursor on location links and hover highlight
-        tree.addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+        // Mouse motion listener for hand cursor on location links and hover highlight
+        tree.addMouseMotionListener(object : MouseMotionAdapter() {
             override fun mouseMoved(e: MouseEvent) {
-                val isOverLink = isMouseOverLocationLink(e, tree)
+                val isOverLink = isMouseOverLocationLink(e)
                 tree.cursor = if (isOverLink) {
                     java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
                 } else {
@@ -263,9 +258,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
                 }
 
                 // Update hovered row for highlight
-                val renderer = tree.cellRenderer as? TaskTreeCellRenderer
                 val newHoveredRow = tree.getRowForLocation(e.x, e.y)
-                if (renderer != null && renderer.hoveredRow != newHoveredRow) {
+                if (renderer.hoveredRow != newHoveredRow) {
                     renderer.hoveredRow = newHoveredRow
                     tree.repaint()
                 }
@@ -275,8 +269,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         // Clear hover when mouse exits
         tree.addMouseListener(object : MouseAdapter() {
             override fun mouseExited(e: MouseEvent) {
-                val renderer = tree.cellRenderer as? TaskTreeCellRenderer
-                if (renderer != null && renderer.hoveredRow != -1) {
+                if (renderer.hoveredRow != -1) {
                     renderer.hoveredRow = -1
                     tree.repaint()
                 }
@@ -284,7 +277,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         })
     }
 
-    private fun handleLocationClick(e: MouseEvent, tree: CheckboxTree): Boolean {
+    private fun handleLocationClick(e: MouseEvent): Boolean {
         val path = tree.getPathForLocation(e.x, e.y) ?: return false
         val node = path.lastPathComponent as? CheckedTreeNode ?: return false
         val task = node.userObject as? Task ?: return false
@@ -294,11 +287,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val row = tree.getRowForPath(path)
         val rowBounds = tree.getRowBounds(row) ?: return false
 
-        // Get the renderer to access location bounds
-        val renderer = tree.cellRenderer as? TaskTreeCellRenderer ?: return false
-
         // Configure renderer for this cell to get correct bounds
-        tree.getCellRenderer().getTreeCellRendererComponent(
+        tree.cellRenderer.getTreeCellRendererComponent(
             tree, node, tree.isRowSelected(row), tree.isExpanded(row),
             tree.model.isLeaf(node), row, tree.hasFocus()
         )
@@ -324,7 +314,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         return false
     }
 
-    private fun isMouseOverLocationLink(e: MouseEvent, tree: CheckboxTree): Boolean {
+    private fun isMouseOverLocationLink(e: MouseEvent): Boolean {
         val path = tree.getPathForLocation(e.x, e.y) ?: return false
         val node = path.lastPathComponent as? CheckedTreeNode ?: return false
         val task = node.userObject as? Task ?: return false
@@ -334,9 +324,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val row = tree.getRowForPath(path)
         val rowBounds = tree.getRowBounds(row) ?: return false
 
-        val renderer = tree.cellRenderer as? TaskTreeCellRenderer ?: return false
-
-        tree.getCellRenderer().getTreeCellRendererComponent(
+        tree.cellRenderer.getTreeCellRendererComponent(
             tree, node, tree.isRowSelected(row), tree.isExpanded(row),
             tree.model.isLeaf(node), row, tree.hasFocus()
         )
@@ -346,7 +334,6 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val textStartX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
         val clickRelativeX = e.x - textStartX
 
-        // Use actual string width for accurate positioning
         val fm = tree.getFontMetrics(tree.font)
         val locationStartX = fm.stringWidth(renderer.textBeforeLink)
         val locationEndX = locationStartX + fm.stringWidth(renderer.linkText)
@@ -354,7 +341,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         return clickRelativeX >= locationStartX && clickRelativeX <= locationEndX
     }
 
-    private fun handleDoubleClick(e: MouseEvent, tree: CheckboxTree) {
+    private fun handleDoubleClick(e: MouseEvent) {
         val path = tree.getPathForLocation(e.x, e.y) ?: return
         val node = path.lastPathComponent as? CheckedTreeNode ?: return
         val task = node.userObject as? Task ?: return
@@ -368,7 +355,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         }
     }
 
-    private fun maybeShowContextMenu(e: MouseEvent, tree: CheckboxTree) {
+    private fun maybeShowContextMenu(e: MouseEvent) {
         if (!e.isPopupTrigger) return
         val path = tree.getPathForLocation(e.x, e.y) ?: return
         val node = path.lastPathComponent as? CheckedTreeNode ?: return
@@ -383,7 +370,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         contextMenuBuilder.buildContextMenu(task, allSelectedTasks).show(tree, e.x, e.y)
     }
 
-    private fun setupKeyboardShortcuts(tree: CheckboxTree) {
+    private fun setupKeyboardShortcuts(tree: JTree) {
         val undoAction = object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent?) {
                 taskService.undo()
@@ -422,7 +409,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         }
     }
 
-    private fun setupExpansionListener(tree: CheckboxTree) {
+    private fun setupExpansionListener(tree: JTree) {
         tree.addTreeExpansionListener(object : javax.swing.event.TreeExpansionListener {
             override fun treeExpanded(event: javax.swing.event.TreeExpansionEvent) {
                 if (!treeManager.isRefreshing()) {
