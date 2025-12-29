@@ -61,6 +61,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private val mainPanel = JPanel(BorderLayout())
     private var taskListener: (() -> Unit)? = null
     private var focusListener: FocusService.FocusChangeListener? = null
+    private val animationService = CheckmarkAnimationService()
 
     init {
         instances[project] = this
@@ -70,6 +71,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private fun setupUI() {
         tree = createCheckboxTree()
+        animationService.setRepaintCallback { tree.repaint() }
         treeManager = TaskTreeManager(tree, taskService)
         dragDropHandler = TaskDragDropHandler(
             tree,
@@ -144,6 +146,17 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val checkboxTree = object : CheckboxTree(renderer, CheckedTreeNode("Tasks"), policy) {
             override fun onNodeStateChanged(node: CheckedTreeNode) {
                 val task = node.userObject as? Task ?: return
+
+                // Trigger animation before state change if completing
+                if (node.isChecked) {
+                    val row = getRowForPath(javax.swing.tree.TreePath(node.path))
+                    if (row >= 0) {
+                        getRowBounds(row)?.let { bounds ->
+                            animationService.startAnimation(task.id, bounds)
+                        }
+                    }
+                }
+
                 taskService.setTaskCompletion(task.id, node.isChecked)
                 if (node.isChecked) {
                     focusService.onTaskCompleted(task.id)
@@ -160,6 +173,14 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
                         dragDropHandler.dropTargetRow,
                         dragDropHandler.dropPosition
                     )
+                }
+
+                // Paint checkmark animations
+                if (animationService.hasActiveAnimations()) {
+                    val g2 = g as? java.awt.Graphics2D ?: return
+                    for ((_, state) in animationService.getActiveAnimations()) {
+                        CheckmarkPainter.paint(g2, state.bounds, state.getProgress())
+                    }
                 }
             }
 
@@ -587,6 +608,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         taskListener = null
         focusListener?.let { focusService.removeListener(it) }
         focusListener = null
+        animationService.dispose()
         focusBarPanel.dispose()
     }
 
