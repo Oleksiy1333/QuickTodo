@@ -15,7 +15,6 @@ class TaskTreeManager(
     private val taskService: TaskService
 ) {
     private var isRefreshing = false
-    private var hasLoadedOnce = false
 
     /**
      * Returns true if the tree is currently being refreshed.
@@ -29,10 +28,7 @@ class TaskTreeManager(
     fun refreshTree() {
         isRefreshing = true
         try {
-            val currentExpandedIds = getExpandedTaskIdsFromTree()
-            val persistedExpandedIds = taskService.getExpandedTaskIds()
-            val expandedTaskIds = currentExpandedIds + persistedExpandedIds
-            val isFirstLoad = !hasLoadedOnce && expandedTaskIds.isEmpty() && taskService.getTasks().isNotEmpty()
+            val expandedTaskIds = getExpandedTaskIdsFromTree() + taskService.getExpandedTaskIds()
 
             val tasks = taskService.getTasks()
             val hideCompleted = taskService.isHideCompleted()
@@ -46,15 +42,7 @@ class TaskTreeManager(
             }
 
             tree.model = DefaultTreeModel(rootNode)
-
-            if (isFirstLoad) {
-                expandAll()
-                saveExpandedState()
-            } else {
-                restoreExpandedState(expandedTaskIds)
-            }
-
-            hasLoadedOnce = true
+            restoreExpandedState(expandedTaskIds)
         } finally {
             isRefreshing = false
         }
