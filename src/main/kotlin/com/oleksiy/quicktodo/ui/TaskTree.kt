@@ -64,7 +64,7 @@ open class TaskTree(
                         val task = checkboxPressedOnTask!!
                         checkboxPressedOnTask = null
 
-                        val path = getPathForLocation(e.x, e.y)
+                        val path = getPathForRowAt(e.x, e.y)
                         val node = path?.lastPathComponent as? CheckedTreeNode
                         val releasedTask = node?.userObject as? Task
 
@@ -122,22 +122,41 @@ open class TaskTree(
     }
 
     /**
+     * Gets the TreePath for the row at the given location.
+     * Unlike getPathForLocation, this works anywhere on the row, not just over rendered content.
+     * Returns null if the location is not within any row's vertical bounds.
+     */
+    fun getPathForRowAt(x: Int, y: Int): javax.swing.tree.TreePath? {
+        val row = getClosestRowForLocation(x, y)
+        if (row < 0) return null
+
+        val rowBounds = getRowBounds(row) ?: return null
+        if (y < rowBounds.y || y >= rowBounds.y + rowBounds.height) {
+            return null
+        }
+
+        return getPathForRow(row)
+    }
+
+    /**
      * Get the task at a specific location (for context menus, etc.)
+     * Works anywhere on the row, not just over rendered content.
      */
     fun getTaskAtLocation(x: Int, y: Int): Task? {
-        val path = getPathForLocation(x, y) ?: return null
+        val path = getPathForRowAt(x, y) ?: return null
         val node = path.lastPathComponent as? CheckedTreeNode ?: return null
         return node.userObject as? Task
     }
 
     /**
      * Check if coordinates are over the checkbox area.
+     * The checkbox starts at rowBounds.x (after the expand/collapse arrow).
      */
     fun isOverCheckbox(x: Int, y: Int): Boolean {
-        val path = getPathForLocation(x, y) ?: return false
+        val path = getPathForRowAt(x, y) ?: return false
         val row = getRowForPath(path)
         val rowBounds = getRowBounds(row) ?: return false
         val checkboxEndX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
-        return x <= checkboxEndX
+        return x >= rowBounds.x && x <= checkboxEndX
     }
 }

@@ -49,11 +49,19 @@ class TaskTreeManager(
     }
 
     /**
+     * Checks if a task has any incomplete descendants (subtasks, sub-subtasks, etc.).
+     */
+    private fun hasIncompleteDescendants(task: Task): Boolean =
+        task.subtasks.any { !it.isCompleted || hasIncompleteDescendants(it) }
+
+    /**
      * Creates a tree node for a task and its subtasks recursively.
-     * Returns null if the task should be hidden (completed when hideCompleted is true).
+     * Returns null if the task should be hidden (completed when hideCompleted is true
+     * and has no incomplete descendants).
      */
     private fun createTaskNode(task: Task, hideCompleted: Boolean): CheckedTreeNode? {
-        if (hideCompleted && task.isCompleted) {
+        // Only hide completed tasks if they have no incomplete descendants
+        if (hideCompleted && task.isCompleted && !hasIncompleteDescendants(task)) {
             return null
         }
         val node = CheckedTreeNode(task)

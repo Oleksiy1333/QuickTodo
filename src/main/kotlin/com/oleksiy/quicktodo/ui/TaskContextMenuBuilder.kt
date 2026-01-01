@@ -15,6 +15,8 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
+import com.oleksiy.quicktodo.util.TerminalCommandRunner
 import javax.swing.JPopupMenu
 
 /**
@@ -27,6 +29,36 @@ class TaskContextMenuBuilder(
     private val onEditTask: (Task) -> Unit,
     private val onAddSubtask: (Task) -> Unit
 ) {
+    companion object {
+        private fun formatTaskWithSubtasks(task: Task): String {
+            val sb = StringBuilder()
+            sb.append(task.text)
+            if (task.subtasks.isNotEmpty()) {
+                sb.append("\n\nSubtasks:")
+                appendSubtasks(sb, task.subtasks, 1)
+            }
+            return sb.toString()
+        }
+
+        private fun appendSubtasks(sb: StringBuilder, subtasks: List<Task>, depth: Int) {
+            val indent = "  ".repeat(depth)
+            for (subtask in subtasks) {
+                val status = if (subtask.isCompleted) "[x]" else "[ ]"
+                sb.append("\n$indent- $status ${subtask.text}")
+                if (subtask.subtasks.isNotEmpty()) {
+                    appendSubtasks(sb, subtask.subtasks, depth + 1)
+                }
+            }
+        }
+
+        private fun escapeForShell(text: String): String {
+            return text
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("$", "\\$")
+                .replace("`", "\\`")
+        }
+    }
 
     /**
      * Creates a context menu for the given task(s).
@@ -84,6 +116,38 @@ class TaskContextMenuBuilder(
         actionGroup.add(object : AnAction("Edit Task", "Edit task text", AllIcons.Actions.Edit) {
             override fun actionPerformed(e: AnActionEvent) = onEditTask(task)
         })
+
+        // Claude Code integration - show if Claude Code plugin is installed and Terminal is available
+        if (ClaudeCodePluginChecker.isClaudeCodeInstalled() && TerminalCommandRunner.isTerminalAvailable()) {
+            actionGroup.add(Separator.getInstance())
+            actionGroup.add(object : AnAction(
+                "Plan with Claude",
+                "Open Claude Code in plan mode (read-only)",
+                null
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val taskText = escapeForShell(formatTaskWithSubtasks(task))
+                    val command = "claude --permission-mode plan \"$taskText\""
+                    if (!TerminalCommandRunner.executeCommand(project, command, "Claude Code")) {
+                        Messages.showWarningDialog(project, "Failed to open terminal for Claude Code", "Claude Code")
+                    }
+                }
+            })
+            actionGroup.add(object : AnAction(
+                "Implement with Claude",
+                "Open Claude Code to implement this task",
+                null
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val taskText = escapeForShell(formatTaskWithSubtasks(task))
+                    val command = "claude \"$taskText\""
+                    if (!TerminalCommandRunner.executeCommand(project, command, "Claude Code")) {
+                        Messages.showWarningDialog(project, "Failed to open terminal for Claude Code", "Claude Code")
+                    }
+                }
+            })
+            actionGroup.add(Separator.getInstance())
+        }
 
         // Location actions
         if (task.hasCodeLocation()) {

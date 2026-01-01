@@ -171,7 +171,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             }
 
             override fun getToolTipText(event: MouseEvent): String? {
-                val path = getPathForLocation(event.x, event.y) ?: return null
+                val path = getPathForRowAt(event.x, event.y) ?: return null
                 val node = path.lastPathComponent as? CheckedTreeNode ?: return null
                 val task = node.userObject as? Task ?: return null
 
@@ -284,7 +284,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun handleLocationClick(e: MouseEvent): Boolean {
-        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val path = tree.getPathForRowAt(e.x, e.y) ?: return false
         val node = path.lastPathComponent as? CheckedTreeNode ?: return false
         val task = node.userObject as? Task ?: return false
 
@@ -321,7 +321,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun isMouseOverLocationLink(e: MouseEvent): Boolean {
-        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val path = tree.getPathForRowAt(e.x, e.y) ?: return false
         val node = path.lastPathComponent as? CheckedTreeNode ?: return false
         val task = node.userObject as? Task ?: return false
 
@@ -348,13 +348,16 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     }
 
     private fun handleDoubleClick(e: MouseEvent) {
-        val path = tree.getPathForLocation(e.x, e.y) ?: return
+        val path = tree.getPathForRowAt(e.x, e.y) ?: return
         val node = path.lastPathComponent as? CheckedTreeNode ?: return
         val task = node.userObject as? Task ?: return
 
         val row = tree.getRowForPath(path)
         val rowBounds = tree.getRowBounds(row) ?: return
-        val clickedOnCheckbox = e.x in rowBounds.x..(rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH)
+
+        // Ignore clicks on expand/collapse arrow (left of rowBounds.x) or checkbox
+        if (e.x < rowBounds.x) return
+        val clickedOnCheckbox = e.x <= rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH
 
         if (!clickedOnCheckbox) {
             editTask(task)
@@ -363,7 +366,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private fun maybeShowContextMenu(e: MouseEvent) {
         if (!e.isPopupTrigger) return
-        val path = tree.getPathForLocation(e.x, e.y) ?: return
+
+        val path = tree.getPathForRowAt(e.x, e.y) ?: return
         val node = path.lastPathComponent as? CheckedTreeNode ?: return
         val task = node.userObject as? Task ?: return
 
