@@ -11,6 +11,7 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.util.xmlb.annotations.XCollection
+import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 
 @State(
@@ -28,6 +29,8 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         var expandedTaskIds: MutableSet<String> = mutableSetOf()
 
         var hideCompleted: Boolean = false
+
+        var focusTimeByDate: MutableMap<String, Long> = mutableMapOf()
     }
 
     private var myState = State()
@@ -278,6 +281,23 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     private fun notifyListeners() {
         listeners.forEach { it.invoke() }
+    }
+
+    // ============ Daily Focus Time ============
+
+    fun addFocusTime(durationMs: Long) {
+        val today = LocalDate.now().toString()
+        myState.focusTimeByDate[today] = (myState.focusTimeByDate[today] ?: 0L) + durationMs
+        cleanupOldFocusTimeEntries()
+    }
+
+    fun getTodayFocusTime(): Long {
+        return myState.focusTimeByDate[LocalDate.now().toString()] ?: 0L
+    }
+
+    private fun cleanupOldFocusTimeEntries() {
+        val cutoffDate = LocalDate.now().minusDays(7).toString()
+        myState.focusTimeByDate.keys.removeIf { it < cutoffDate }
     }
 
     companion object {

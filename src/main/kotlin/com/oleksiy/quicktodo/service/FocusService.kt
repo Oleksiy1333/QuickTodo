@@ -154,8 +154,10 @@ class FocusService(private val project: Project) : Disposable {
         val task = taskService.findTask(taskId) ?: return
         val focusStart = task.lastFocusStartedAt
         if (focusStart != null) {
-            task.totalTimeSpentMs += System.currentTimeMillis() - focusStart
+            val elapsed = System.currentTimeMillis() - focusStart
+            task.totalTimeSpentMs += elapsed
             task.lastFocusStartedAt = null
+            taskService.addFocusTime(elapsed)
         }
         timerStates[taskId] = TimerState.STOPPED
     }
@@ -164,8 +166,10 @@ class FocusService(private val project: Project) : Disposable {
         val task = taskService.findTask(taskId) ?: return
         val focusStart = task.lastFocusStartedAt
         if (focusStart != null) {
-            task.totalTimeSpentMs += System.currentTimeMillis() - focusStart
+            val elapsed = System.currentTimeMillis() - focusStart
+            task.totalTimeSpentMs += elapsed
             task.lastFocusStartedAt = null
+            taskService.addFocusTime(elapsed)
         }
         timerStates[taskId] = TimerState.PAUSED
     }
