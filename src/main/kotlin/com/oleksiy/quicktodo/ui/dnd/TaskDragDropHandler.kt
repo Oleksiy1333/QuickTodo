@@ -28,6 +28,9 @@ class TaskDragDropHandler(
     companion object {
         val TASK_DATA_FLAVOR = DataFlavor(Task::class.java, "Task")
         val TASKS_DATA_FLAVOR = DataFlavor(TaskList::class.java, "Tasks")
+
+        /** Height of the virtual drop zone below the last row (pixels) */
+        private const val DROP_BELOW_LAST_ZONE_HEIGHT = 30
     }
 
     // Current drag state - supports multiple selected tasks
@@ -229,8 +232,34 @@ class TaskDragDropHandler(
         }
 
         val rowBounds = tree.getRowBounds(targetRow)
-        if (rowBounds == null || location.y < rowBounds.y || location.y >= rowBounds.y + rowBounds.height) {
-            // Mouse is outside actual row bounds (e.g., below all rows)
+        if (rowBounds == null || location.y < rowBounds.y) {
+            clearDropIndicator()
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
+
+        // Check if mouse is below the last row - show "drop at end" indicator
+        val lastRow = tree.rowCount - 1
+        if (targetRow == lastRow && location.y >= rowBounds.y + rowBounds.height) {
+            val lastRowBounds = tree.getRowBounds(lastRow)
+            if (lastRowBounds != null &&
+                location.y < lastRowBounds.y + lastRowBounds.height + DROP_BELOW_LAST_ZONE_HEIGHT) {
+                // Show drop indicator below last row
+                val path = tree.getPathForRow(lastRow)
+                val lastNode = path?.lastPathComponent as? CheckedTreeNode
+                val lastTask = lastNode?.userObject as? Task
+                updateDropIndicator(lastRow, DropPosition.BELOW, lastTask)
+                updateHoverExpand(lastRow, path)
+                dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+                return
+            }
+            clearDropIndicator()
+            dtde.acceptDrag(DnDConstants.ACTION_MOVE)
+            return
+        }
+
+        if (location.y >= rowBounds.y + rowBounds.height) {
+            // Mouse is outside actual row bounds but not in "below last" zone
             clearDropIndicator()
             dtde.acceptDrag(DnDConstants.ACTION_MOVE)
             return
@@ -320,17 +349,27 @@ class TaskDragDropHandler(
     }
 
     private fun handleDropAtRoot(sourceTasks: List<Task>, x: Int, y: Int) {
-        val dropRow = tree.getRowForLocation(x, y)
-        val targetIndex = calculateRootDropIndex(dropRow)
+        // Use getClosestRowForLocation for consistency with dragOver
+        val dropRow = tree.getClosestRowForLocation(x, y)
+        val targetIndex = calculateRootDropIndex(dropRow, y)
         taskService.moveTasks(sourceTasks.map { it.id }, null, targetIndex)
     }
 
-    private fun calculateRootDropIndex(dropRow: Int): Int {
+    private fun calculateRootDropIndex(dropRow: Int, y: Int): Int {
         if (dropRow < 0) return taskService.getTasks().size
+
+        // Check if dropping below the last row
+        val rowBounds = tree.getRowBounds(dropRow)
+        if (rowBounds != null && y >= rowBounds.y + rowBounds.height) {
+            // Mouse is below this row - append to end
+            return taskService.getTasks().size
+        }
 
         val rootTasks = taskService.getTasks()
         for (i in rootTasks.indices) {
-            val taskNode = (tree.model.root as CheckedTreeNode).getChildAt(i)
+            val root = tree.model.root as? CheckedTreeNode ?: return rootTasks.size
+            if (i >= root.childCount) continue
+            val taskNode = root.getChildAt(i)
             val nodeRow = tree.getRowForPath(TreePath(arrayOf(tree.model.root, taskNode)))
             if (nodeRow >= dropRow) return i
         }
