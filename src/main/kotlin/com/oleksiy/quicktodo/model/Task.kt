@@ -29,12 +29,18 @@ data class Task(
     @Attribute("lastFocusStartedAt")
     var lastFocusStartedAt: Long? = null,
 
+    @Attribute("createdAt")
+    var createdAt: Long? = null,
+
+    @Attribute("completedAt")
+    var completedAt: Long? = null,
+
     var codeLocation: CodeLocation? = null,
 
     @XCollection(propertyElementName = "subtasks", elementName = "task")
     var subtasks: MutableList<Task> = mutableListOf()
 ) {
-    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, null, mutableListOf())
+    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, null, null, null, mutableListOf())
 
     fun getPriorityEnum(): Priority = Priority.fromString(priority)
 

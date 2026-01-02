@@ -61,6 +61,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private lateinit var editTaskHandler: EditTaskHandler
     private lateinit var removeTaskHandler: RemoveTaskHandler
     private lateinit var focusBarPanel: FocusBarPanel
+    private lateinit var dailyStatsPanel: DailyStatsPanel
     private val mainPanel = JPanel(BorderLayout())
     private var taskListener: (() -> Unit)? = null
     private var focusListener: FocusService.FocusChangeListener? = null
@@ -129,7 +130,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val decoratorPanel = toolbarDecorator.createPanel()
         setupRightToolbar(decoratorPanel)
 
+        dailyStatsPanel = DailyStatsPanel(project)
         focusBarPanel = FocusBarPanel(project)
+
+        // Add stats panel inside decorator for seamless integration
+        decoratorPanel.add(dailyStatsPanel, BorderLayout.SOUTH)
+
         mainPanel.add(focusBarPanel, BorderLayout.NORTH)
         mainPanel.add(decoratorPanel, BorderLayout.CENTER)
         mainPanel.border = JBUI.Borders.empty()
@@ -386,6 +392,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         focusListener?.let { focusService.removeListener(it) }
         focusListener = null
         animationService.dispose()
+        dailyStatsPanel.dispose()
         focusBarPanel.dispose()
     }
 

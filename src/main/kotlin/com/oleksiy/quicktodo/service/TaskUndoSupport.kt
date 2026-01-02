@@ -22,7 +22,7 @@ internal class TaskUndoSupport(
     private val tasks: MutableList<Task> get() = tasksProvider()
 
     override fun addTaskWithoutUndo(taskId: String, text: String, priority: Priority): Task {
-        val task = Task(id = taskId, text = text, level = 0, priority = priority.name)
+        val task = Task(id = taskId, text = text, level = 0, priority = priority.name, createdAt = System.currentTimeMillis())
         tasks.add(task)
         notifyListeners()
         return task
@@ -41,7 +41,8 @@ internal class TaskUndoSupport(
             id = subtaskId,
             text = text,
             level = parent.level + 1,
-            priority = priority.name
+            priority = priority.name,
+            createdAt = System.currentTimeMillis()
         )
         parent.subtasks.add(subtask)
         notifyListeners()
@@ -64,6 +65,7 @@ internal class TaskUndoSupport(
     override fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean {
         val task = tasks.findTaskById(taskId) ?: return false
         task.isCompleted = completed
+        task.completedAt = if (completed) System.currentTimeMillis() else null
         notifyListeners()
         return true
     }

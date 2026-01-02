@@ -48,8 +48,22 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     override fun loadState(state: State) {
         XmlSerializerUtil.copyBean(state, myState)
+        migrateTaskTimestamps(myState.tasks)
         undoRedoManager.clearHistory()
         notifyListeners()
+    }
+
+    private fun migrateTaskTimestamps(tasks: List<Task>) {
+        val now = System.currentTimeMillis()
+        for (task in tasks) {
+            if (task.createdAt == null) {
+                task.createdAt = now
+            }
+            if (task.isCompleted && task.completedAt == null) {
+                task.completedAt = now
+            }
+            migrateTaskTimestamps(task.subtasks)
+        }
     }
 
     // ============ State Queries ============
@@ -84,7 +98,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     // ============ Public CRUD API (creates undo commands) ============
 
     fun addTask(text: String, priority: Priority = Priority.NONE): Task {
-        val task = Task(text = text, level = 0, priority = priority.name)
+        val task = Task(text = text, level = 0, priority = priority.name, createdAt = System.currentTimeMillis())
         myState.tasks.add(task)
         undoRedoManager.recordCommand(AddTaskCommand(task.id, text, priority))
         notifyListeners()
@@ -95,6 +109,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         val parent = findTask(parentId) ?: return null
         if (!parent.canAddSubtask()) return null
         val subtask = parent.addSubtask(text, priority)
+        subtask.createdAt = System.currentTimeMillis()
         undoRedoManager.recordCommand(AddSubtaskCommand(subtask.id, parentId, text, priority))
         notifyListeners()
         return subtask
@@ -151,6 +166,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
         val beforeStates = mapOf(task.id to task.isCompleted)
         task.isCompleted = completed
+        task.completedAt = if (completed) System.currentTimeMillis() else null
 
         undoRedoManager.recordCommand(
             SetTaskCompletionCommand(taskId, beforeStates, completed)
