@@ -123,7 +123,7 @@ class TaskContextMenuBuilder(
             actionGroup.add(object : AnAction(
                 "Plan with Claude",
                 "Open Claude Code in plan mode (read-only)",
-                null
+                QuickTodoIcons.Claude
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     val taskText = escapeForShell(formatTaskWithSubtasks(task))
@@ -136,7 +136,7 @@ class TaskContextMenuBuilder(
             actionGroup.add(object : AnAction(
                 "Implement with Claude",
                 "Open Claude Code to implement this task",
-                null
+                QuickTodoIcons.Claude
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     val taskText = escapeForShell(formatTaskWithSubtasks(task))
