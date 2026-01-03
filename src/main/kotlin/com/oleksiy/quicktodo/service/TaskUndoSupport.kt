@@ -131,7 +131,10 @@ internal class TaskUndoSupport(
 
     override fun restoreCompletionStates(states: Map<String, Boolean>) {
         states.forEach { (taskId, completed) ->
-            tasks.findTaskById(taskId)?.isCompleted = completed
+            tasks.findTaskById(taskId)?.let { task ->
+                task.isCompleted = completed
+                task.completedAt = if (completed) System.currentTimeMillis() else null
+            }
         }
         notifyListeners()
     }
