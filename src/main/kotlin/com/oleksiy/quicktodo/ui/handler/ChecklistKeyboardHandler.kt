@@ -12,12 +12,13 @@ import javax.swing.KeyStroke
 
 /**
  * Handles keyboard shortcuts for the checklist tree.
- * Supports undo, redo, and copy operations with platform-appropriate key bindings.
+ * Supports undo, redo, copy, add task, and move operations with platform-appropriate key bindings.
  */
 class ChecklistKeyboardHandler(
     private val tree: JTree,
     private val onUndo: () -> Unit,
     private val onRedo: () -> Unit,
+    private val onAddTask: () -> Unit,
     private val getSelectedTasks: () -> List<Task>,
     private val onMoveUp: () -> Unit,
     private val onMoveDown: () -> Unit,
@@ -52,6 +53,12 @@ class ChecklistKeyboardHandler(
         val clearSelectionAction = object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent?) {
                 tree.clearSelection()
+            }
+        }
+
+        val addTaskAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                onAddTask()
             }
         }
 
@@ -96,6 +103,9 @@ class ChecklistKeyboardHandler(
             put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.META_DOWN_MASK), "copyTaskText")
             // ESC: Clear selection
             put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "clearSelection")
+            // Add task: Ctrl+Enter (Windows/Linux) or Cmd+Enter (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK), "addTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.META_DOWN_MASK), "addTask")
             // Move up: Ctrl+Up (Windows/Linux) or Cmd+Up (macOS)
             put(moveUpCtrl, "moveTaskUp")
             put(moveUpMeta, "moveTaskUp")
@@ -109,6 +119,7 @@ class ChecklistKeyboardHandler(
             put("redoTask", redoAction)
             put("copyTaskText", copyAction)
             put("clearSelection", clearSelectionAction)
+            put("addTask", addTaskAction)
             put("moveTaskUp", moveUpAction)
             put("moveTaskDown", moveDownAction)
         }

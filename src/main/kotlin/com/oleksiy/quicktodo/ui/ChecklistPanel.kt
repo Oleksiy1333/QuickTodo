@@ -98,21 +98,22 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             onEditTask = { task -> editTaskHandler.editTask(task) },
             getSelectedTasks = { getSelectedTasks() }
         )
-        keyboardHandler = ChecklistKeyboardHandler(
-            tree,
-            onUndo = { taskService.undo() },
-            onRedo = { taskService.redo() },
-            getSelectedTasks = { getSelectedTasks() },
-            onMoveUp = { moveSelectedTask(-1) },
-            onMoveDown = { moveSelectedTask(1) },
-            canMoveUp = { canMoveSelectedTask(-1) },
-            canMoveDown = { canMoveSelectedTask(1) }
-        )
         addTaskHandler = AddTaskHandler(
             project,
             taskService,
             treeManager,
             getSelectedTask = { getSelectedTask() }
+        )
+        keyboardHandler = ChecklistKeyboardHandler(
+            tree,
+            onUndo = { taskService.undo() },
+            onRedo = { taskService.redo() },
+            onAddTask = { addTaskHandler.addTask() },
+            getSelectedTasks = { getSelectedTasks() },
+            onMoveUp = { moveSelectedTask(-1) },
+            onMoveDown = { moveSelectedTask(1) },
+            canMoveUp = { canMoveSelectedTask(-1) },
+            canMoveDown = { canMoveSelectedTask(1) }
         )
         editTaskHandler = EditTaskHandler(
             project,
