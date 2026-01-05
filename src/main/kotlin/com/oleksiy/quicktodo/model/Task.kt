@@ -14,6 +14,9 @@ data class Task(
     @Attribute("text")
     var text: String = "",
 
+    @Attribute("description")
+    var description: String = "",
+
     @Attribute("completed")
     var isCompleted: Boolean = false,
 
@@ -40,7 +43,7 @@ data class Task(
     @XCollection(propertyElementName = "subtasks", elementName = "task")
     var subtasks: MutableList<Task> = mutableListOf()
 ) {
-    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, null, null, null, mutableListOf())
+    constructor() : this(UUID.randomUUID().toString(), "", "", false, 0, Priority.NONE.name, 0, null, null, null, null, mutableListOf())
 
     fun getPriorityEnum(): Priority = Priority.fromString(priority)
 
@@ -51,6 +54,8 @@ data class Task(
     fun canAddSubtask(): Boolean = level < ChecklistConstants.MAX_NESTING_LEVEL
 
     fun hasCodeLocation(): Boolean = codeLocation?.isValid() == true
+
+    fun hasDescription(): Boolean = description.isNotBlank()
 
     fun addSubtask(text: String, priority: Priority = Priority.NONE): Task {
         require(canAddSubtask()) { "Maximum nesting level reached" }

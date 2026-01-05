@@ -7,6 +7,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
@@ -30,10 +32,16 @@ class NewTaskDialog(
     dialogTitle: String = "New Task",
     initialText: String = "",
     initialPriority: Priority = Priority.NONE,
-    private val initialLocation: CodeLocation? = null
+    private val initialLocation: CodeLocation? = null,
+    initialDescription: String = ""
 ) : DialogWrapper(project) {
 
     private val nameField = JBTextField(initialText)
+    private val descriptionTextArea = JBTextArea(initialDescription, 3, 30).apply {
+        lineWrap = true
+        wrapStyleWord = true
+    }
+    private val descriptionScrollPane = JBScrollPane(descriptionTextArea)
     private val priorityComboBox = ComboBox(Priority.entries.toTypedArray())
 
     // Location components
@@ -151,9 +159,11 @@ class NewTaskDialog(
 
     override fun createCenterPanel(): JComponent {
         nameField.preferredSize = Dimension(350, nameField.preferredSize.height)
+        descriptionScrollPane.preferredSize = Dimension(350, 80)
 
         return FormBuilder.createFormBuilder()
             .addLabeledComponent("Name:", nameField)
+            .addLabeledComponent("Description:", descriptionScrollPane)
             .addLabeledComponent("Priority:", priorityComboBox)
             .addVerticalGap(8)
             .addLabeledComponent("Location:", locationCardPanel)
@@ -163,6 +173,7 @@ class NewTaskDialog(
     override fun getPreferredFocusedComponent(): JComponent = nameField
 
     fun getTaskText(): String = nameField.text.trim()
+    fun getDescription(): String = descriptionTextArea.text.trim()
     fun getSelectedPriority(): Priority = priorityComboBox.selectedItem as Priority
     fun getCodeLocation(): CodeLocation? = currentLocation?.takeIf { it.isValid() }
 

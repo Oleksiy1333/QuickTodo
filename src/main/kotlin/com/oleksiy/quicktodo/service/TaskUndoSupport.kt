@@ -62,6 +62,13 @@ internal class TaskUndoSupport(
         return true
     }
 
+    override fun updateTaskDescriptionWithoutUndo(taskId: String, newDescription: String): Boolean {
+        val task = tasks.findTaskById(taskId) ?: return false
+        task.description = newDescription
+        notifyListeners()
+        return true
+    }
+
     override fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean {
         val task = tasks.findTaskById(taskId) ?: return false
         task.isCompleted = completed

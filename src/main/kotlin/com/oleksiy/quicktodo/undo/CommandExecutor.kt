@@ -18,6 +18,7 @@ interface CommandExecutor {
 
     // Task updates without undo registration
     fun updateTaskTextWithoutUndo(taskId: String, newText: String): Boolean
+    fun updateTaskDescriptionWithoutUndo(taskId: String, newDescription: String): Boolean
     fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean
     fun setTaskPriorityWithoutUndo(taskId: String, priority: Priority): Boolean
     fun setTaskLocationWithoutUndo(taskId: String, location: CodeLocation?): Boolean

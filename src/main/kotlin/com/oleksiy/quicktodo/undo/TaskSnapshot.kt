@@ -15,6 +15,7 @@ object TaskSnapshot {
         return Task(
             id = task.id,
             text = task.text,
+            description = task.description,
             isCompleted = task.isCompleted,
             level = task.level,
             priority = task.priority,

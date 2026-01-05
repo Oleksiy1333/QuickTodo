@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.oleksiy"
-version = "1.0.7"
+version = "1.0.8-task-description"
 
 repositories {
     mavenCentral()

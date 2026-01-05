@@ -77,11 +77,15 @@ class AddTaskHandler(
         val dialog = NewTaskDialog(project, "New Subtask")
         if (dialog.showAndGet()) {
             val text = dialog.getTaskText()
+            val description = dialog.getDescription()
             val priority = dialog.getSelectedPriority()
             val location = dialog.getCodeLocation()
             if (text.isNotBlank()) {
                 val subtask = taskService.addSubtask(parentTask.id, text, priority)
                 if (subtask != null) {
+                    if (description.isNotBlank()) {
+                        taskService.updateTaskDescription(subtask.id, description)
+                    }
                     location?.let { taskService.setTaskLocation(subtask.id, it) }
                     SwingUtilities.invokeLater {
                         if (keepParentSelected) {
@@ -100,10 +104,14 @@ class AddTaskHandler(
         val dialog = NewTaskDialog(project)
         if (dialog.showAndGet()) {
             val text = dialog.getTaskText()
+            val description = dialog.getDescription()
             val priority = dialog.getSelectedPriority()
             val location = dialog.getCodeLocation()
             if (text.isNotBlank()) {
                 val task = taskService.addTask(text, priority)
+                if (description.isNotBlank()) {
+                    taskService.updateTaskDescription(task.id, description)
+                }
                 location?.let { taskService.setTaskLocation(task.id, it) }
                 // Scroll to newly added task without selecting it
                 SwingUtilities.invokeLater {

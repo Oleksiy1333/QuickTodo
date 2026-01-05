@@ -34,6 +34,7 @@
         <ul>
             <li>Shortcuts can be customized in Settings → Keymap → search for "QuickTodo"</li>
             <li>Ask AI to edit <code>.idea/quicktodo.tasklist.xml</code> to quickly set up or modify tasks</li>
+            <li>"Plan with Claude" and "Implement with Claude" context menu actions are only available when the <a href="https://plugins.jetbrains.com/plugin/27310-claude-code-beta-">Claude Code</a> plugin is installed</li>
         </ul>
     ]]></description>
 

@@ -26,10 +26,20 @@ class TaskTreeCellRenderer(
     private val checkbox = JCheckBox()
     private val textRenderer = SimpleColoredComponent()
 
+    // Track description indicator for click detection
+    var textBeforeDescriptionIndicator: String = ""
+        private set
+    var descriptionIndicatorText: String = ""
+        private set
+
     // Track location link text for click detection
     var textBeforeLink: String = ""
         private set
     var linkText: String = ""
+        private set
+
+    // Track icon width for click detection calculations
+    var iconWidth: Int = 0
         private set
 
     // Track hovered row for highlight
@@ -56,8 +66,11 @@ class TaskTreeCellRenderer(
         // Reset state
         textRenderer.clear()
         textRenderer.icon = null
+        textBeforeDescriptionIndicator = ""
+        descriptionIndicatorText = ""
         textBeforeLink = ""
         linkText = ""
+        iconWidth = 0
 
         val node = value as? CheckedTreeNode
         val task = node?.userObject as? Task
@@ -130,7 +143,20 @@ class TaskTreeCellRenderer(
             val icon = QuickTodoIcons.getIconForPriority(priority)
             if (icon != null) {
                 textRenderer.icon = icon
+                iconWidth = icon.iconWidth + textRenderer.iconTextGap
             }
+        }
+
+        // Show description indicator if task has description
+        if (task.hasDescription()) {
+            textRenderer.append("  ")
+            textBeforeDescriptionIndicator = textRenderer.toString()
+            descriptionIndicatorText = "[...]"
+            val indicatorAttributes = SimpleTextAttributes(
+                SimpleTextAttributes.STYLE_UNDERLINE,
+                JBUI.CurrentTheme.Link.Foreground.ENABLED
+            )
+            textRenderer.append(descriptionIndicatorText, indicatorAttributes)
         }
 
         // Show linked file location at the end

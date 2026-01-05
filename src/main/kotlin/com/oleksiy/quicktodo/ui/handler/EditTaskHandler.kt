@@ -30,15 +30,20 @@ class EditTaskHandler(
             dialogTitle = "Edit Task",
             initialText = task.text,
             initialPriority = task.getPriorityEnum(),
-            initialLocation = task.codeLocation
+            initialLocation = task.codeLocation,
+            initialDescription = task.description
         )
         if (dialog.showAndGet()) {
             val newText = dialog.getTaskText()
+            val newDescription = dialog.getDescription()
             val newPriority = dialog.getSelectedPriority()
             val newLocation = dialog.getCodeLocation()
             if (newText.isNotBlank()) {
                 if (newText != task.text) {
                     taskService.updateTaskText(task.id, newText)
+                }
+                if (newDescription != task.description) {
+                    taskService.updateTaskDescription(task.id, newDescription)
                 }
                 if (newPriority != task.getPriorityEnum()) {
                     taskService.setTaskPriority(task.id, newPriority)

@@ -6,6 +6,7 @@ import com.oleksiy.quicktodo.ui.CodeLocationUtil
 import com.oleksiy.quicktodo.ui.TaskContextMenuBuilder
 import com.oleksiy.quicktodo.ui.TaskTree
 import com.oleksiy.quicktodo.ui.TaskTreeCellRenderer
+import com.oleksiy.quicktodo.ui.util.DescriptionIndicatorDetector
 import com.oleksiy.quicktodo.ui.util.LocationLinkDetector
 import com.intellij.openapi.project.Project
 import com.intellij.ui.CheckedTreeNode
@@ -44,6 +45,9 @@ class ChecklistMouseHandler(
                 }
 
                 if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
+                    if (handleDescriptionIndicatorClick(e)) {
+                        return
+                    }
                     if (handleLocationClick(e)) {
                         return
                     }
@@ -67,7 +71,8 @@ class ChecklistMouseHandler(
         tree.addMouseMotionListener(object : MouseMotionAdapter() {
             override fun mouseMoved(e: MouseEvent) {
                 val isOverLink = LocationLinkDetector.isMouseOverLink(tree, renderer, e)
-                tree.cursor = if (isOverLink) {
+                val isOverDescriptionIndicator = DescriptionIndicatorDetector.isMouseOverIndicator(tree, renderer, e)
+                tree.cursor = if (isOverLink || isOverDescriptionIndicator) {
                     Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
                 } else {
                     Cursor.getDefaultCursor()
@@ -92,6 +97,18 @@ class ChecklistMouseHandler(
                 }
             }
         })
+    }
+
+    /**
+     * Handles click on a description indicator. Returns true if indicator was clicked.
+     */
+    private fun handleDescriptionIndicatorClick(e: MouseEvent): Boolean {
+        val task = DescriptionIndicatorDetector.getClickedTask(tree, renderer, e)
+        if (task != null) {
+            onEditTask(task)
+            return true
+        }
+        return false
     }
 
     /**

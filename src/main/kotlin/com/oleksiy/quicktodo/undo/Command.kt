@@ -136,6 +136,26 @@ data class EditTaskTextCommand(
 }
 
 /**
+ * Command for editing task description.
+ */
+data class EditTaskDescriptionCommand(
+    val taskId: String,
+    val oldDescription: String,
+    val newDescription: String
+) : Command {
+    override val description: String
+        get() = "Edit description"
+
+    override fun undo(executor: CommandExecutor) {
+        executor.updateTaskDescriptionWithoutUndo(taskId, oldDescription)
+    }
+
+    override fun redo(executor: CommandExecutor) {
+        executor.updateTaskDescriptionWithoutUndo(taskId, newDescription)
+    }
+}
+
+/**
  * Command for changing task completion status.
  * Captures completion states of task and all subtasks for cascade operations.
  */

@@ -217,6 +217,18 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         return true
     }
 
+    fun updateTaskDescription(taskId: String, newDescription: String): Boolean {
+        val task = findTask(taskId) ?: return false
+        val oldDescription = task.description
+
+        if (oldDescription == newDescription) return true
+
+        task.description = newDescription
+        undoRedoManager.recordCommand(EditTaskDescriptionCommand(taskId, oldDescription, newDescription))
+        notifyListeners()
+        return true
+    }
+
     fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
         return moveTasks(listOf(taskId), targetParentId, targetIndex)
     }
