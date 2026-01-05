@@ -200,13 +200,28 @@ class TaskContextMenuBuilder(
             })
         }
 
-        // Copy action
+        // Copy actions
         actionGroup.add(object : AnAction("Copy", "Copy task name to clipboard", AllIcons.Actions.Copy) {
             override fun actionPerformed(e: AnActionEvent) {
                 val text = allSelectedTasks.joinToString("\n") { it.text }
                 CopyPasteManager.getInstance().setContents(StringSelection(text))
             }
         })
+
+        // Copy with subtasks (only show if any task has subtasks or description)
+        val hasSubtasksOrDescription = allSelectedTasks.any { it.subtasks.isNotEmpty() || it.hasDescription() }
+        if (hasSubtasksOrDescription) {
+            actionGroup.add(object : AnAction(
+                "Copy All",
+                "Copy task with all subtasks and descriptions to clipboard",
+                AllIcons.Actions.Copy
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val text = allSelectedTasks.joinToString("\n\n---\n\n") { formatTaskWithSubtasks(it) }
+                    CopyPasteManager.getInstance().setContents(StringSelection(text))
+                }
+            })
+        }
 
         // Delete action
         val deleteLabel = if (allSelectedTasks.size > 1) "Delete ${allSelectedTasks.size} Tasks" else "Delete Task"
