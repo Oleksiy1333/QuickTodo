@@ -23,11 +23,23 @@ data class Task(
     @Attribute("priority")
     var priority: String = Priority.NONE.name,
 
+    @Attribute("ownTimeSpentMs")
+    var ownTimeSpentMs: Long = 0,
+
+    // TODO: Legacy field for migration
     @Attribute("totalTimeSpentMs")
     var totalTimeSpentMs: Long = 0,
 
     @Attribute("lastFocusStartedAt")
     var lastFocusStartedAt: Long? = null,
+
+    // Derived field
+    @Transient
+    var accumulatedHierarchyTimeMs: Long = 0,
+
+    // Derived field
+    @Transient
+    var lastAccumulatedFocusStartedAt: Long? = null,
 
     @Attribute("createdAt")
     var createdAt: Long? = null,
@@ -43,7 +55,18 @@ data class Task(
     @XCollection(propertyElementName = "subtasks", elementName = "task")
     var subtasks: MutableList<Task> = mutableListOf()
 ) {
-    constructor() : this(UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name, 0, null, null, null, System.currentTimeMillis(), null, mutableListOf())
+    constructor() : this(
+        UUID.randomUUID().toString(), "", false, 0, Priority.NONE.name,
+        0, 0, null, 0, null,
+        null, null, System.currentTimeMillis(), null, mutableListOf()
+    )
+
+    init {
+        // Migration: copy totalTimeSpentMs to ownTimeSpentMs if ownTimeSpentMs is 0
+        if (ownTimeSpentMs == 0L && totalTimeSpentMs > 0L) {
+            ownTimeSpentMs = totalTimeSpentMs
+        }
+    }
 
     fun getPriorityEnum(): Priority = Priority.fromString(priority)
 

@@ -19,6 +19,7 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
         var autoPauseEnabled: Boolean = true
         var idleMinutes: Int = 5
         var recentTasksCount: Int = 10
+        var accumulateHierarchyTime: Boolean = true
     }
 
     private var myState = State()
@@ -51,6 +52,12 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
 
     fun setRecentTasksCount(count: Int) {
         myState.recentTasksCount = count.coerceIn(5, 50)
+    }
+
+    fun isAccumulateHierarchyTime(): Boolean = myState.accumulateHierarchyTime
+
+    fun setAccumulateHierarchyTime(enabled: Boolean) {
+        myState.accumulateHierarchyTime = enabled
     }
 
     companion object {

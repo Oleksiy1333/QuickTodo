@@ -20,6 +20,7 @@ class QuickTodoConfigurable : Configurable {
     private lateinit var autoPauseCheckBox: JBCheckBox
     private lateinit var idleMinutesField: JBTextField
     private lateinit var recentTasksCountField: JBTextField
+    private lateinit var accumulateHierarchyCheckBox: JBCheckBox
 
     override fun getDisplayName(): String = "QuickTodo"
 
@@ -36,15 +37,19 @@ class QuickTodoConfigurable : Configurable {
         }
 
         // Create autopause controls on one line
-        autoPauseCheckBox = JBCheckBox("Pause if idle")
+        autoPauseCheckBox = JBCheckBox("Focus timer pause if idle")
         autoPauseCheckBox.isSelected = settings.isAutoPauseEnabled()
 
-        idleMinutesField = JBTextField(settings.getIdleMinutes().toString(), 5)
+        idleMinutesField = JBTextField(settings.getIdleMinutes().toString(), 5).apply {
+            maximumSize = java.awt.Dimension(50, preferredSize.height)
+        }
 
         val autoPausePanel = JPanel().apply {
-            layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 5, 0)
+            layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
             add(autoPauseCheckBox)
+            add(javax.swing.Box.createHorizontalStrut(5))
             add(idleMinutesField)
+            add(javax.swing.Box.createHorizontalStrut(5))
             add(JLabel("minutes"))
         }
 
@@ -53,6 +58,10 @@ class QuickTodoConfigurable : Configurable {
         autoPauseCheckBox.addActionListener {
             idleMinutesField.isEnabled = autoPauseCheckBox.isSelected
         }
+
+        // Create hierarchy accumulation checkbox
+        accumulateHierarchyCheckBox = JBCheckBox("Accumulate hierarchy time")
+        accumulateHierarchyCheckBox.isSelected = settings.isAccumulateHierarchyTime()
 
         // Create recent tasks count field
         recentTasksCountField = JBTextField(settings.getRecentTasksCount().toString(), 5)
@@ -69,11 +78,12 @@ class QuickTodoConfigurable : Configurable {
             .addComponent(radioButtons[TooltipBehavior.TRUNCATED]!!, 1)
             .addComponent(radioButtons[TooltipBehavior.NEVER]!!, 1)
             .addVerticalGap(10)
-            .addComponent(TitledSeparator("Focus Timer"))
-            .addComponent(autoPausePanel, 1)
+            .addComponent(TitledSeparator("Time Tracking"))
+            .addComponent(autoPausePanel, 0)
+            .addComponent(accumulateHierarchyCheckBox, 1)
             .addVerticalGap(10)
             .addComponent(TitledSeparator("Recent Tasks"))
-            .addComponent(recentTasksPanel, 1)
+            .addComponent(recentTasksPanel, 0)
             .addComponentFillVertically(JPanel(), 0)
             .panel
 
@@ -102,7 +112,9 @@ class QuickTodoConfigurable : Configurable {
             false
         }
 
-        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified
+        val accumulateHierarchyModified = accumulateHierarchyCheckBox.isSelected != settings.isAccumulateHierarchyTime()
+
+        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified
     }
 
     override fun apply() {
@@ -129,6 +141,8 @@ class QuickTodoConfigurable : Configurable {
         } catch (e: NumberFormatException) {
             // Keep current value if invalid
         }
+
+        settings.setAccumulateHierarchyTime(accumulateHierarchyCheckBox.isSelected)
     }
 
     override fun reset() {
@@ -144,5 +158,7 @@ class QuickTodoConfigurable : Configurable {
         idleMinutesField.isEnabled = autoPauseCheckBox.isSelected
 
         recentTasksCountField.text = settings.getRecentTasksCount().toString()
+
+        accumulateHierarchyCheckBox.isSelected = settings.isAccumulateHierarchyTime()
     }
 }

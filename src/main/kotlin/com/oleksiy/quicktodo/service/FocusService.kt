@@ -131,26 +131,91 @@ class FocusService(private val project: Project) : Disposable {
         }
     }
 
+    /**
+     * Gets the total elapsed time for a task including hierarchy accumulation.
+     * This shows ownTime + accumulatedHierarchyTime + any currently running timers.
+     */
     fun getElapsedTime(taskId: String): Long {
         val task = taskService.findTask(taskId) ?: return 0
-        val baseTime = task.totalTimeSpentMs
-        val focusStart = task.lastFocusStartedAt
 
-        return if (focusStart != null && timerStates[taskId] == TimerState.RUNNING) {
-            baseTime + (System.currentTimeMillis() - focusStart)
-        } else {
-            baseTime
+        // Start with own time
+        var totalTime = task.ownTimeSpentMs
+
+        // Add currently running own timer if applicable
+        val ownFocusStart = task.lastFocusStartedAt
+        if (ownFocusStart != null && timerStates[taskId] == TimerState.RUNNING) {
+            totalTime += (System.currentTimeMillis() - ownFocusStart)
         }
+
+        // Add accumulated hierarchy time only if setting is enabled
+        if (QuickTodoSettings.getInstance().isAccumulateHierarchyTime()) {
+            // Add accumulated hierarchy time (already calculated)
+            totalTime += task.accumulatedHierarchyTimeMs
+
+            // Add currently running accumulated timer if applicable
+            val accumulatedFocusStart = task.lastAccumulatedFocusStartedAt
+            if (accumulatedFocusStart != null) {
+                totalTime += (System.currentTimeMillis() - accumulatedFocusStart)
+            }
+        }
+
+        return totalTime
     }
 
     fun getFormattedTime(taskId: String): String {
-        val totalMs = getElapsedTime(taskId)
-        return formatTime(totalMs)
+        val task = taskService.findTask(taskId) ?: return ""
+
+        // Calculate own time (with running timer if applicable)
+        var ownTime = task.ownTimeSpentMs
+        val ownFocusStart = task.lastFocusStartedAt
+        if (ownFocusStart != null && timerStates[taskId] == TimerState.RUNNING) {
+            ownTime += (System.currentTimeMillis() - ownFocusStart)
+        }
+
+        // Calculate accumulated time (with running timer if applicable) only if setting is enabled
+        var accumulatedTime = 0L
+        if (QuickTodoSettings.getInstance().isAccumulateHierarchyTime()) {
+            accumulatedTime = task.accumulatedHierarchyTimeMs
+            val accumulatedFocusStart = task.lastAccumulatedFocusStartedAt
+            if (accumulatedFocusStart != null) {
+                accumulatedTime += (System.currentTimeMillis() - accumulatedFocusStart)
+            }
+        }
+
+        // Format display based on own time and accumulated time
+        return when {
+            accumulatedTime > 0 && ownTime > 0 -> {
+                // Show own time with total in parenthesis: "5m (15m)"
+                "${formatTime(ownTime)} (${formatTime(ownTime + accumulatedTime)})"
+            }
+            accumulatedTime > 0 && ownTime == 0L -> {
+                // Only show total in parenthesis: "(10m)"
+                "(${formatTime(accumulatedTime)})"
+            }
+            ownTime > 0 -> {
+                // Show own time only
+                formatTime(ownTime)
+            }
+            else -> {
+                // No time to display
+                ""
+            }
+        }
     }
 
     fun hasAccumulatedTime(taskId: String): Boolean {
         val task = taskService.findTask(taskId) ?: return false
-        return task.totalTimeSpentMs > 0 || timerStates[taskId] == TimerState.RUNNING
+
+        val hasOwnTime = task.ownTimeSpentMs > 0 || timerStates[taskId] == TimerState.RUNNING
+
+        // If hierarchy accumulation is enabled, also check accumulated time
+        val hasHierarchyTime = if (QuickTodoSettings.getInstance().isAccumulateHierarchyTime()) {
+            task.accumulatedHierarchyTimeMs > 0 || task.lastAccumulatedFocusStartedAt != null
+        } else {
+            false
+        }
+
+        return hasOwnTime || hasHierarchyTime
     }
 
     private fun formatTime(totalMs: Long): String {
@@ -172,44 +237,77 @@ class FocusService(private val project: Project) : Disposable {
         timerStates[taskId] = TimerState.RUNNING
     }
 
+    private fun startAccumulatedTimer(taskId: String) {
+        val task = taskService.findTask(taskId) ?: return
+        task.lastAccumulatedFocusStartedAt = System.currentTimeMillis()
+    }
+
     private fun stopTimerAndAccumulate(taskId: String) {
         val task = taskService.findTask(taskId) ?: return
+
+        // Stop own-time timer
         val focusStart = task.lastFocusStartedAt
         if (focusStart != null) {
             val elapsed = System.currentTimeMillis() - focusStart
-            task.totalTimeSpentMs += elapsed
+            task.ownTimeSpentMs += elapsed
             task.lastFocusStartedAt = null
             taskService.addFocusTime(elapsed)
         }
+
         timerStates[taskId] = TimerState.STOPPED
+
+        // Recalculate hierarchy time for the entire tree
+        taskService.recalculateHierarchyTime()
+    }
+
+    private fun stopAccumulatedTimer(taskId: String) {
+        val task = taskService.findTask(taskId) ?: return
+        task.lastAccumulatedFocusStartedAt = null
     }
 
     private fun pauseTimer(taskId: String) {
         val task = taskService.findTask(taskId) ?: return
+
+        // Pause own-time timer
         val focusStart = task.lastFocusStartedAt
         if (focusStart != null) {
             val elapsed = System.currentTimeMillis() - focusStart
-            task.totalTimeSpentMs += elapsed
+            task.ownTimeSpentMs += elapsed
             task.lastFocusStartedAt = null
             taskService.addFocusTime(elapsed)
         }
+
         timerStates[taskId] = TimerState.PAUSED
+
+        // Recalculate hierarchy time for the entire tree
+        taskService.recalculateHierarchyTime()
+    }
+
+    private fun pauseAccumulatedTimer(taskId: String) {
+        val task = taskService.findTask(taskId) ?: return
+        task.lastAccumulatedFocusStartedAt = null
     }
 
     private fun startParentTimers(taskId: String) {
+        // Only accumulate hierarchy time if setting is enabled
+        if (!QuickTodoSettings.getInstance().isAccumulateHierarchyTime()) {
+            return
+        }
+
         var currentId = taskId
         while (true) {
             val parentId = taskService.findParentId(currentId) ?: break
-            startTimer(parentId)
+            startAccumulatedTimer(parentId)
             currentId = parentId
         }
     }
 
     private fun pauseParentTimers(taskId: String) {
+        // Always pause parent timers unconditionally to handle setting changes
         var currentId = taskId
         while (true) {
             val parentId = taskService.findParentId(currentId) ?: break
-            pauseTimer(parentId)
+            pauseAccumulatedTimer(parentId)
             currentId = parentId
         }
     }

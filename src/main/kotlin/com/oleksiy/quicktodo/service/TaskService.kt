@@ -52,6 +52,9 @@ class TaskService : PersistentStateComponent<TaskService.State> {
     override fun loadState(state: State) {
         XmlSerializerUtil.copyBean(state, myState)
         migrateTaskTimestamps(myState.tasks)
+        migrateTimeTracking(myState.tasks)
+        // Recalculate hierarchy time after loading state
+        recalculateHierarchyTime()
         undoRedoManager.clearHistory()
         notifyListeners()
     }
@@ -66,6 +69,41 @@ class TaskService : PersistentStateComponent<TaskService.State> {
                 task.completedAt = now
             }
             migrateTaskTimestamps(task.subtasks)
+        }
+    }
+
+    /**
+     * Migrates old totalTimeSpentMs to the new ownTimeSpentMs field.
+     * This properly handles the transition from the old time tracking system
+     * where totalTimeSpentMs included both own and child time.
+     * After migration, totalTimeSpentMs is cleared so it won't be persisted.
+     */
+    private fun migrateTimeTracking(tasks: List<Task>) {
+        for (task in tasks) {
+            // Migration strategy: if ownTimeSpentMs is 0 but totalTimeSpentMs has a value,
+            // we need to split it intelligently
+            if (task.ownTimeSpentMs == 0L && task.totalTimeSpentMs > 0L) {
+                // First, recursively migrate children
+                migrateTimeTracking(task.subtasks)
+
+                // Calculate children's total time
+                val childrenTotalTime = task.subtasks.sumOf { it.totalTimeSpentMs }
+
+                if (childrenTotalTime > 0L) {
+                    // Parent had accumulated time - split it
+                    // Own time = total - children's time (but ensure non-negative)
+                    task.ownTimeSpentMs = (task.totalTimeSpentMs - childrenTotalTime).coerceAtLeast(0L)
+                } else {
+                    // No children or children have no time - all time is own time
+                    task.ownTimeSpentMs = task.totalTimeSpentMs
+                }
+
+                // Clear the legacy field after migration so it won't be persisted
+                task.totalTimeSpentMs = 0
+            } else {
+                // Already migrated or no time to migrate, just process children
+                migrateTimeTracking(task.subtasks)
+            }
         }
     }
 
@@ -221,6 +259,21 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         return true
     }
 
+    fun updateTaskOwnTime(taskId: String, newTimeMs: Long): Boolean {
+        val task = findTask(taskId) ?: return false
+
+        if (task.ownTimeSpentMs == newTimeMs) return true
+
+        task.ownTimeSpentMs = newTimeMs
+        task.lastModified = System.currentTimeMillis()
+
+        // Recalculate hierarchy time after changing own time
+        recalculateHierarchyTime()
+
+        notifyListeners()
+        return true
+    }
+
     fun moveTask(taskId: String, targetParentId: String?, targetIndex: Int): Boolean {
         return moveTasks(listOf(taskId), targetParentId, targetIndex)
     }
@@ -247,6 +300,10 @@ class TaskService : PersistentStateComponent<TaskService.State> {
                 findTask(taskId)?.lastModified = System.currentTimeMillis()
             }
             undoRedoManager.recordCommand(MoveTasksCommand(moveInfos, targetParentId, targetIndex))
+
+            // Recalculate hierarchy time after task movement
+            recalculateHierarchyTime()
+
             notifyListeners()
         }
 
@@ -276,6 +333,44 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     fun getUndoDescription(): String? = undoRedoManager.getUndoDescription()
     fun getRedoDescription(): String? = undoRedoManager.getRedoDescription()
+
+    // ============ Hierarchy Time Calculation ============
+
+    /**
+     * Recalculates accumulatedHierarchyTimeMs for all tasks in the tree.
+     * This must be called after any timer stop/pause or task movement.
+     */
+    fun recalculateHierarchyTime() {
+        // Reset all accumulated times first
+        fun resetAccumulatedTime(tasks: List<Task>) {
+            for (task in tasks) {
+                task.accumulatedHierarchyTimeMs = 0
+                resetAccumulatedTime(task.subtasks)
+            }
+        }
+        resetAccumulatedTime(myState.tasks)
+
+        // Calculate accumulated time bottom-up
+        fun calculateAccumulatedTime(task: Task): Long {
+            // Start with own time
+            var total = task.ownTimeSpentMs
+
+            // Add each child's total time (own + their accumulated)
+            for (subtask in task.subtasks) {
+                total += calculateAccumulatedTime(subtask)
+            }
+
+            // Store the accumulated time (excludes own time)
+            task.accumulatedHierarchyTimeMs = total - task.ownTimeSpentMs
+
+            return total
+        }
+
+        // Calculate for all root tasks
+        for (task in myState.tasks) {
+            calculateAccumulatedTime(task)
+        }
+    }
 
     // ============ Listener Management ============
 

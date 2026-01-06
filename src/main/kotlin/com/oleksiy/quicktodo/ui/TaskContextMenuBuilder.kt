@@ -117,6 +117,21 @@ class TaskContextMenuBuilder(
             override fun actionPerformed(e: AnActionEvent) = onEditTask(task)
         })
 
+        // Edit Time action
+        actionGroup.add(object : AnAction("Edit Time", "Edit task time", AllIcons.Actions.EditSource) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val dialog = EditTimeDialog(project, task.text, task.ownTimeSpentMs)
+                if (dialog.showAndGet()) {
+                    val newTimeMs = dialog.getTimeMs()
+                    if (newTimeMs != null) {
+                        taskService.updateTaskOwnTime(task.id, newTimeMs)
+                    } else {
+                        Messages.showErrorDialog(project, "Invalid time format", "Edit Time")
+                    }
+                }
+            }
+        })
+
         // Claude Code integration - show if Claude Code plugin is installed and Terminal is available
         if (ClaudeCodePluginChecker.isClaudeCodeInstalled() && TerminalCommandRunner.isTerminalAvailable()) {
             actionGroup.add(Separator.getInstance())
