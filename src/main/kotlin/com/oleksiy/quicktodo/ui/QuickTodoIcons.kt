@@ -1,5 +1,6 @@
 package com.oleksiy.quicktodo.ui
 
+import com.intellij.icons.AllIcons
 import com.oleksiy.quicktodo.model.Priority
 import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon
@@ -25,6 +26,19 @@ object QuickTodoIcons {
 
     @JvmField
     val Claude: Icon = IconLoader.getIcon("/icons/claude.svg", javaClass)
+
+    // Automation icons (using IntelliJ built-in icons)
+    @JvmField
+    val AutomationRun: Icon = AllIcons.Actions.Execute
+
+    @JvmField
+    val AutomationPause: Icon = AllIcons.Actions.Pause
+
+    @JvmField
+    val AutomationStop: Icon = AllIcons.Actions.Suspend
+
+    @JvmField
+    val AutomationResume: Icon = AllIcons.Actions.Resume
 
     fun getIconForPriority(priority: Priority): Icon? {
         return when (priority) {

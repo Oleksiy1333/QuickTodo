@@ -54,6 +54,7 @@
         <projectService serviceImplementation="com.oleksiy.quicktodo.service.TaskService"/>
         <projectService serviceImplementation="com.oleksiy.quicktodo.service.FocusService"/>
         <projectService serviceImplementation="com.oleksiy.quicktodo.service.DailyTaskStatsService"/>
+        <projectService serviceImplementation="com.oleksiy.quicktodo.service.AutomationService"/>
         <projectService serviceImplementation="com.oleksiy.quicktodo.editor.TaskEditorMarkerService"/>
 
         <postStartupActivity implementation="com.oleksiy.quicktodo.editor.TaskEditorMarkerStartupActivity"/>

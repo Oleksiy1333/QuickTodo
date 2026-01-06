@@ -16,6 +16,7 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
+import com.oleksiy.quicktodo.util.TaskTextFormatter
 import com.oleksiy.quicktodo.util.TerminalCommandRunner
 import javax.swing.JPopupMenu
 
@@ -29,53 +30,6 @@ class TaskContextMenuBuilder(
     private val onEditTask: (Task) -> Unit,
     private val onAddSubtask: (Task) -> Unit
 ) {
-    companion object {
-        private fun formatTaskWithSubtasks(task: Task): String {
-            val sb = StringBuilder()
-            sb.append(task.text)
-
-            // Include description if present (indented below task name)
-            if (task.hasDescription()) {
-                sb.append("\n")
-                task.description.lines().forEach { line ->
-                    sb.append("  $line\n")
-                }
-            }
-
-            if (task.subtasks.isNotEmpty()) {
-                sb.append("\n\nSubtasks:")
-                appendSubtasks(sb, task.subtasks, 1)
-            }
-            return sb.toString()
-        }
-
-        private fun appendSubtasks(sb: StringBuilder, subtasks: List<Task>, depth: Int) {
-            val indent = "  ".repeat(depth)
-            for (subtask in subtasks) {
-                val status = if (subtask.isCompleted) "[x]" else "[ ]"
-                sb.append("\n$indent- $status ${subtask.text}")
-
-                // Include subtask description if present
-                if (subtask.hasDescription()) {
-                    subtask.description.lines().forEach { line ->
-                        sb.append("\n$indent    $line")
-                    }
-                }
-
-                if (subtask.subtasks.isNotEmpty()) {
-                    appendSubtasks(sb, subtask.subtasks, depth + 1)
-                }
-            }
-        }
-
-        private fun escapeForShell(text: String): String {
-            return text
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("$", "\\$")
-                .replace("`", "\\`")
-        }
-    }
 
     /**
      * Creates a context menu for the given task(s).
@@ -143,7 +97,7 @@ class TaskContextMenuBuilder(
                 QuickTodoIcons.Claude
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
-                    val taskText = escapeForShell(formatTaskWithSubtasks(task))
+                    val taskText = TaskTextFormatter.escapeForShell(TaskTextFormatter.formatTaskWithSubtasks(task))
                     val command = "claude --permission-mode plan \"$taskText\""
                     if (!TerminalCommandRunner.executeCommand(project, command, "Claude Code")) {
                         Messages.showWarningDialog(project, "Failed to open terminal for Claude Code", "Claude Code")
@@ -156,7 +110,7 @@ class TaskContextMenuBuilder(
                 QuickTodoIcons.Claude
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
-                    val taskText = escapeForShell(formatTaskWithSubtasks(task))
+                    val taskText = TaskTextFormatter.escapeForShell(TaskTextFormatter.formatTaskWithSubtasks(task))
                     val command = "claude \"$taskText\""
                     if (!TerminalCommandRunner.executeCommand(project, command, "Claude Code")) {
                         Messages.showWarningDialog(project, "Failed to open terminal for Claude Code", "Claude Code")
@@ -217,7 +171,7 @@ class TaskContextMenuBuilder(
                 AllIcons.Actions.Copy
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
-                    val text = allSelectedTasks.joinToString("\n\n---\n\n") { formatTaskWithSubtasks(it) }
+                    val text = allSelectedTasks.joinToString("\n\n---\n\n") { TaskTextFormatter.formatTaskWithSubtasks(it) }
                     CopyPasteManager.getInstance().setContents(StringSelection(text))
                 }
             })
