@@ -2,12 +2,9 @@ package com.oleksiy.quicktodo.ui
 
 import com.oleksiy.quicktodo.action.ChecklistActionCallback
 import com.oleksiy.quicktodo.action.ClearCompletedAction
-import com.oleksiy.quicktodo.action.CollapseAllAction
-import com.oleksiy.quicktodo.action.ExpandAllAction
 import com.oleksiy.quicktodo.action.MoveTaskAction
 import com.oleksiy.quicktodo.action.RedoAction
 import com.oleksiy.quicktodo.action.StartAutomationAction
-import com.oleksiy.quicktodo.action.ToggleHideCompletedAction
 import com.oleksiy.quicktodo.action.UndoAction
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.AutomationService
@@ -22,7 +19,6 @@ import com.oleksiy.quicktodo.ui.handler.RemoveTaskHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.CheckedTreeNode
@@ -171,6 +167,9 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
                 moveUpAction,
                 moveDownAction
             )
+            .setPanelBorder(JBUI.Borders.empty())
+            .setScrollPaneBorder(JBUI.Borders.empty())
+            .setToolbarBorder(JBUI.Borders.empty())
     }
 
     private fun setupRightToolbar(decoratorPanel: JPanel) {
@@ -186,10 +185,6 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val rightActionGroup = DefaultActionGroup(
             UndoAction { taskService },
             RedoAction { taskService },
-            Separator.getInstance(),
-            ExpandAllAction(this),
-            CollapseAllAction(this),
-            ToggleHideCompletedAction(this),
             ClearCompletedAction(this)
         )
         val rightToolbar = ActionManager.getInstance()
@@ -199,12 +194,14 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val decoratorLayout = decoratorPanel.layout as? BorderLayout ?: return
         val originalToolbar = decoratorLayout.getLayoutComponent(BorderLayout.NORTH) ?: return
 
+        // Remove border from original toolbar
+        (originalToolbar as? JPanel)?.border = JBUI.Borders.empty()
+
         decoratorPanel.remove(originalToolbar)
         val toolbarRowPanel = JPanel(BorderLayout()).apply {
             add(originalToolbar, BorderLayout.WEST)
             add(centerToolbar.component, BorderLayout.CENTER)
             add(rightToolbar.component, BorderLayout.EAST)
-            border = JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 0, 0, 1, 0)
         }
         decoratorPanel.add(toolbarRowPanel, BorderLayout.NORTH)
     }
