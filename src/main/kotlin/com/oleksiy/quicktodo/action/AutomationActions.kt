@@ -4,24 +4,47 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.oleksiy.quicktodo.model.AutomationState
+import com.oleksiy.quicktodo.service.AiConfigService
 import com.oleksiy.quicktodo.service.AutomationService
 import com.oleksiy.quicktodo.ui.QuickTodoIcons
+import com.oleksiy.quicktodo.ui.ai.TaskSelectionDialog
 import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
 import com.oleksiy.quicktodo.util.TerminalCommandRunner
 
 /**
  * Action to start the Claude automation workflow.
- * Processes all incomplete tasks sequentially with Claude in plan mode.
+ * Shows task selection dialog, then processes selected tasks with configurable execution modes.
  */
 class StartAutomationAction(
-    private val automationServiceProvider: () -> AutomationService?
+    private val automationServiceProvider: () -> AutomationService?,
+    private val projectProvider: () -> com.intellij.openapi.project.Project?
 ) : AnAction(
     "Build with Claude",
-    "Start building tasks with Claude Code in plan mode",
+    "Start building tasks with Claude Code",
     QuickTodoIcons.Claude
 ) {
     override fun actionPerformed(e: AnActionEvent) {
-        automationServiceProvider()?.start()
+        val project = projectProvider() ?: return
+        val automationService = automationServiceProvider() ?: return
+
+        // Show task selection dialog
+        val dialog = TaskSelectionDialog(project)
+        if (dialog.showAndGet()) {
+            val selectedTaskIds = dialog.getSelectedTaskIds()
+            val autoContinue = dialog.isAutoContinue()
+            val taskConfigs = dialog.getTaskConfigs()
+
+            if (selectedTaskIds.isNotEmpty()) {
+                // Save config and task execution modes
+                val aiConfig = AiConfigService.getInstance(project)
+                aiConfig.startSession(selectedTaskIds, autoContinue)
+                aiConfig.setTaskConfigs(taskConfigs)
+                aiConfig.setAskMoreQuestions(dialog.isAskMoreQuestions())
+                aiConfig.setSelectedModel(dialog.getSelectedModel())
+
+                automationService.startWithConfig(selectedTaskIds, autoContinue)
+            }
+        }
     }
 
     override fun update(e: AnActionEvent) {

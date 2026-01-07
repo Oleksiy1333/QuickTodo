@@ -175,7 +175,10 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private fun setupRightToolbar(decoratorPanel: JPanel) {
         // Center toolbar with Claude button
         val centerActionGroup = DefaultActionGroup(
-            StartAutomationAction { automationService }
+            StartAutomationAction(
+                automationServiceProvider = { automationService },
+                projectProvider = { project }
+            )
         )
         val centerToolbar = ActionManager.getInstance()
             .createActionToolbar("ChecklistCenterToolbar", centerActionGroup, true)
