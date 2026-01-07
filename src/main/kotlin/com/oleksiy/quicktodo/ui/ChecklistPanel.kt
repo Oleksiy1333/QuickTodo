@@ -1,15 +1,13 @@
 package com.oleksiy.quicktodo.ui
 
-import com.oleksiy.quicktodo.action.AddSubtaskAction
 import com.oleksiy.quicktodo.action.ChecklistActionCallback
 import com.oleksiy.quicktodo.action.ClearCompletedAction
-import com.oleksiy.quicktodo.action.CollapseAllAction
-import com.oleksiy.quicktodo.action.ExpandAllAction
 import com.oleksiy.quicktodo.action.MoveTaskAction
 import com.oleksiy.quicktodo.action.RedoAction
-import com.oleksiy.quicktodo.action.ToggleHideCompletedAction
+import com.oleksiy.quicktodo.action.StartAutomationAction
 import com.oleksiy.quicktodo.action.UndoAction
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.service.AutomationService
 import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
 import com.oleksiy.quicktodo.ui.dnd.TaskDragDropHandler
@@ -21,7 +19,6 @@ import com.oleksiy.quicktodo.ui.handler.RemoveTaskHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.CheckedTreeNode
@@ -31,6 +28,7 @@ import java.awt.BorderLayout
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.event.MouseEvent
+import javax.swing.BoxLayout
 import javax.swing.DropMode
 import javax.swing.JPanel
 import javax.swing.JTree
@@ -50,6 +48,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     private val taskService = TaskService.getInstance(project)
     private val focusService = FocusService.getInstance(project)
+    private val automationService = AutomationService.getInstance(project)
     private lateinit var tree: TaskTree
     private lateinit var renderer: TaskTreeCellRenderer
     private lateinit var treeManager: TaskTreeManager
@@ -61,6 +60,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private lateinit var editTaskHandler: EditTaskHandler
     private lateinit var removeTaskHandler: RemoveTaskHandler
     private lateinit var focusBarPanel: FocusBarPanel
+    private lateinit var automationBarPanel: AutomationBarPanel
     private lateinit var dailyStatsPanel: DailyStatsPanel
     private val mainPanel = JPanel(BorderLayout())
     private var taskListener: (() -> Unit)? = null
@@ -137,11 +137,19 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
         dailyStatsPanel = DailyStatsPanel(project)
         focusBarPanel = FocusBarPanel(project)
+        automationBarPanel = AutomationBarPanel(project)
 
         // Add stats panel inside decorator for seamless integration
         decoratorPanel.add(dailyStatsPanel, BorderLayout.SOUTH)
 
-        mainPanel.add(focusBarPanel, BorderLayout.NORTH)
+        // Create a north panel to hold both focus and automation bars
+        val northPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(focusBarPanel)
+            add(automationBarPanel)
+        }
+
+        mainPanel.add(northPanel, BorderLayout.NORTH)
         mainPanel.add(decoratorPanel, BorderLayout.CENTER)
         mainPanel.border = JBUI.Borders.empty()
     }
@@ -156,20 +164,30 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             .setEditAction { editTaskHandler.editSelectedTask() }
             .setEditActionUpdater { getSelectedTask() != null }
             .addExtraActions(
-                AddSubtaskAction(this),
                 moveUpAction,
                 moveDownAction
             )
+            .setPanelBorder(JBUI.Borders.empty())
+            .setScrollPaneBorder(JBUI.Borders.empty())
+            .setToolbarBorder(JBUI.Borders.empty())
     }
 
     private fun setupRightToolbar(decoratorPanel: JPanel) {
+        // Center toolbar with Claude button
+        val centerActionGroup = DefaultActionGroup(
+            StartAutomationAction(
+                automationServiceProvider = { automationService },
+                projectProvider = { project }
+            )
+        )
+        val centerToolbar = ActionManager.getInstance()
+            .createActionToolbar("ChecklistCenterToolbar", centerActionGroup, true)
+        centerToolbar.targetComponent = tree
+
+        // Right toolbar with other actions
         val rightActionGroup = DefaultActionGroup(
             UndoAction { taskService },
             RedoAction { taskService },
-            Separator.getInstance(),
-            ExpandAllAction(this),
-            CollapseAllAction(this),
-            ToggleHideCompletedAction(this),
             ClearCompletedAction(this)
         )
         val rightToolbar = ActionManager.getInstance()
@@ -179,11 +197,14 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         val decoratorLayout = decoratorPanel.layout as? BorderLayout ?: return
         val originalToolbar = decoratorLayout.getLayoutComponent(BorderLayout.NORTH) ?: return
 
+        // Remove border from original toolbar
+        (originalToolbar as? JPanel)?.border = JBUI.Borders.empty()
+
         decoratorPanel.remove(originalToolbar)
         val toolbarRowPanel = JPanel(BorderLayout()).apply {
-            add(originalToolbar, BorderLayout.CENTER)
+            add(originalToolbar, BorderLayout.WEST)
+            add(centerToolbar.component, BorderLayout.CENTER)
             add(rightToolbar.component, BorderLayout.EAST)
-            border = JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 0, 0, 1, 0)
         }
         decoratorPanel.add(toolbarRowPanel, BorderLayout.NORTH)
     }
@@ -403,6 +424,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         animationService.dispose()
         dailyStatsPanel.dispose()
         focusBarPanel.dispose()
+        automationBarPanel.dispose()
     }
 
     fun getContent(): JPanel = mainPanel
