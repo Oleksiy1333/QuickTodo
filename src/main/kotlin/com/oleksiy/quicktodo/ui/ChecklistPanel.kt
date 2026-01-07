@@ -239,9 +239,6 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
         setupExpansionListener(taskTree)
 
-        taskTree.dragEnabled = true
-        taskTree.dropMode = DropMode.ON_OR_INSERT
-
         return taskTree
     }
 
