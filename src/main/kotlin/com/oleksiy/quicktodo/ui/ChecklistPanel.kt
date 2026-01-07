@@ -10,6 +10,8 @@ import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.AutomationService
 import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
+import com.oleksiy.quicktodo.settings.QuickTodoSettings
+import com.oleksiy.quicktodo.settings.TooltipBehavior
 import com.oleksiy.quicktodo.ui.dnd.TaskDragDropHandler
 import com.oleksiy.quicktodo.ui.handler.AddTaskHandler
 import com.oleksiy.quicktodo.ui.handler.ChecklistKeyboardHandler
@@ -27,10 +29,19 @@ import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.event.MouseMotionAdapter
+import java.awt.datatransfer.StringSelection
+import java.awt.event.ActionEvent
+import java.awt.event.KeyEvent
+import javax.swing.AbstractAction
 import javax.swing.BoxLayout
 import javax.swing.DropMode
+import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.KeyStroke
+import com.intellij.openapi.ide.CopyPasteManager
 import javax.swing.JTree
 import javax.swing.SwingUtilities
 
@@ -66,6 +77,7 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
     private var taskListener: (() -> Unit)? = null
     private var focusListener: FocusService.FocusChangeListener? = null
     private val animationService = CheckmarkAnimationService()
+    private val tooltipPopup = TaskTooltipPopup(project, focusService)
 
     init {
         instances[project] = this
@@ -239,12 +251,12 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             }
 
             override fun getToolTipText(event: MouseEvent): String? {
-                if (!::mouseHandler.isInitialized) return null
+                if (!::renderer.isInitialized) return null
                 val path = getPathForRowAt(event.x, event.y) ?: return null
                 val node = path.lastPathComponent as? CheckedTreeNode ?: return null
                 val task = node.userObject as? Task ?: return null
 
-                if (task.hasCodeLocation() && mouseHandler.isMouseOverLocationLink(event)) {
+                if (task.hasCodeLocation() && isMouseOverLocationLink(event)) {
                     return task.codeLocation?.relativePath
                 }
                 return null
@@ -255,9 +267,11 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         taskTree.isRootVisible = false
         taskTree.showsRootHandles = true
 
-        // Enable tooltips
+        // Enable tooltips for code location links
         javax.swing.ToolTipManager.sharedInstance().registerComponent(taskTree)
 
+        setupMouseListeners(taskTree)
+        setupKeyboardShortcuts(taskTree)
         setupExpansionListener(taskTree)
 
         return taskTree
@@ -286,6 +300,215 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
         taskService.setTaskCompletion(task.id, isChecked)
         if (isChecked) {
             focusService.onTaskCompleted(task.id)
+        }
+    }
+
+    private fun setupMouseListeners(tree: TaskTree) {
+        // Mouse motion listener for hand cursor on location links and hover highlight
+        var tooltipTimer: javax.swing.Timer? = null
+        var lastHoveredTask: Task? = null
+
+        tree.addMouseListener(object : MouseAdapter() {
+            override fun mousePressed(e: MouseEvent) {
+                // Hide tooltip immediately when clicking on a task
+                tooltipPopup.hideTooltip()
+                // Cancel any pending tooltip timer to prevent it from showing
+                tooltipTimer?.stop()
+            }
+        })
+
+        tree.addMouseMotionListener(object : MouseMotionAdapter() {
+            override fun mouseMoved(e: MouseEvent) {
+                val isOverLink = isMouseOverLocationLink(e)
+                tree.cursor = if (isOverLink) {
+                    java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
+                } else {
+                    java.awt.Cursor.getDefaultCursor()
+                }
+
+                // Update hovered row for highlight
+                val newHoveredRow = tree.getRowForLocation(e.x, e.y)
+                if (renderer.hoveredRow != newHoveredRow) {
+                    renderer.hoveredRow = newHoveredRow
+                    tree.repaint()
+                }
+
+                // Show tooltip after delay
+                val path = tree.getPathForLocation(e.x, e.y)
+                val task = (path?.lastPathComponent as? CheckedTreeNode)?.userObject as? Task
+
+                if (task != lastHoveredTask) {
+                    tooltipTimer?.stop()
+
+                    if (task == null) {
+                        // Mouse moved away from tasks - schedule hide with delay
+                        tooltipPopup.scheduleHide()
+                    } else {
+                        // Different task - schedule hide with delay, then show new tooltip after 800ms
+                        tooltipPopup.scheduleHide()
+
+                        // Check if tooltip should be shown based on settings
+                        if (shouldShowTooltip(task, path)) {
+                            tooltipTimer = javax.swing.Timer(800) {
+                                val mouseLocation = com.intellij.ui.awt.RelativePoint(e)
+                                tooltipPopup.showTooltip(task, mouseLocation)
+                            }.apply {
+                                isRepeats = false
+                                start()
+                            }
+                        }
+                    }
+
+                    lastHoveredTask = task
+                }
+            }
+        })
+
+        // Clear hover when mouse exits tree
+        tree.addMouseListener(object : MouseAdapter() {
+            override fun mouseExited(e: MouseEvent) {
+                if (renderer.hoveredRow != -1) {
+                    renderer.hoveredRow = -1
+                    tree.repaint()
+                }
+                tooltipTimer?.stop()
+                tooltipTimer = null
+                lastHoveredTask = null
+                // Schedule hide with delay to allow moving mouse to popup
+                tooltipPopup.scheduleHide()
+            }
+        })
+    }
+
+    private fun handleLocationClick(e: MouseEvent): Boolean {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return false
+        val task = node.userObject as? Task ?: return false
+
+        if (!task.hasCodeLocation()) return false
+
+        val row = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(row) ?: return false
+
+        // Configure renderer for this cell to get correct bounds
+        tree.cellRenderer.getTreeCellRendererComponent(
+            tree, node, tree.isRowSelected(row), tree.isExpanded(row),
+            tree.model.isLeaf(node), row, tree.hasFocus()
+        )
+
+        if (renderer.linkText.isEmpty()) return false
+
+        // Calculate click position relative to text start
+        val textStartX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
+        val clickRelativeX = e.x - textStartX
+
+        // Use actual string width for accurate positioning
+        val fm = tree.getFontMetrics(tree.font)
+        val locationStartX = fm.stringWidth(renderer.textBeforeLink)
+        val locationEndX = locationStartX + fm.stringWidth(renderer.linkText)
+
+        if (clickRelativeX >= locationStartX && clickRelativeX <= locationEndX) {
+            task.codeLocation?.let { location ->
+                CodeLocationUtil.navigateToLocation(project, location)
+            }
+            return true
+        }
+
+        return false
+    }
+
+    private fun isMouseOverLocationLink(e: MouseEvent): Boolean {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return false
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return false
+        val task = node.userObject as? Task ?: return false
+
+        if (!task.hasCodeLocation()) return false
+
+        val row = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(row) ?: return false
+
+        tree.cellRenderer.getTreeCellRendererComponent(
+            tree, node, tree.isRowSelected(row), tree.isExpanded(row),
+            tree.model.isLeaf(node), row, tree.hasFocus()
+        )
+
+        if (renderer.linkText.isEmpty()) return false
+
+        val textStartX = rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH + 4
+        val clickRelativeX = e.x - textStartX
+
+        val fm = tree.getFontMetrics(tree.font)
+        val locationStartX = fm.stringWidth(renderer.textBeforeLink)
+        val locationEndX = locationStartX + fm.stringWidth(renderer.linkText)
+
+        return clickRelativeX >= locationStartX && clickRelativeX <= locationEndX
+    }
+
+    private fun handleDoubleClick(e: MouseEvent) {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return
+        val task = node.userObject as? Task ?: return
+
+        val row = tree.getRowForPath(path)
+        val rowBounds = tree.getRowBounds(row) ?: return
+        val clickedOnCheckbox = e.x in rowBounds.x..(rowBounds.x + ChecklistConstants.CHECKBOX_WIDTH)
+
+        if (!clickedOnCheckbox) {
+            editTaskHandler.editTask(task)
+        }
+    }
+
+    private fun maybeShowContextMenu(e: MouseEvent) {
+        if (!e.isPopupTrigger) return
+        val path = tree.getPathForLocation(e.x, e.y) ?: return
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return
+        val task = node.userObject as? Task ?: return
+
+        // If clicked task is not in current selection, select only that task
+        // Otherwise keep multi-selection for copy operation
+        if (!tree.isPathSelected(path)) {
+            tree.selectionPath = path
+        }
+        val allSelectedTasks = getSelectedTasks()
+        contextMenuBuilder.buildContextMenu(task, allSelectedTasks).show(tree, e.x, e.y)
+    }
+
+    private fun setupKeyboardShortcuts(tree: JTree) {
+        val undoAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                taskService.undo()
+            }
+        }
+        val redoAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                taskService.redo()
+            }
+        }
+        val copyAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                val tasks = getSelectedTasks()
+                if (tasks.isEmpty()) return
+                val text = tasks.joinToString("\n") { it.text }
+                CopyPasteManager.getInstance().setContents(StringSelection(text))
+            }
+        }
+        tree.getInputMap(JComponent.WHEN_FOCUSED).apply {
+            // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undoTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK), "undoTask")
+            // Redo: Ctrl+Shift+Z (Windows/Linux) or Cmd+Shift+Z (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "redoTask")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "redoTask")
+            // Also Ctrl+Y for redo on Windows/Linux
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, KeyEvent.CTRL_DOWN_MASK), "redoTask")
+            // Copy
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.CTRL_DOWN_MASK), "copyTaskText")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.META_DOWN_MASK), "copyTaskText")
+        }
+        tree.actionMap.apply {
+            put("undoTask", undoAction)
+            put("redoTask", redoAction)
+            put("copyTaskText", copyAction)
         }
     }
 
@@ -435,5 +658,49 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
      */
     fun selectTaskById(taskId: String) {
         treeManager.selectTaskById(taskId)
+    }
+
+    /**
+     * Determines if a tooltip should be shown based on settings and truncation state.
+     */
+    private fun shouldShowTooltip(task: Task, path: javax.swing.tree.TreePath?): Boolean {
+        val settings = QuickTodoSettings.getInstance()
+
+        return when (settings.getTooltipBehavior()) {
+            TooltipBehavior.ALWAYS -> true
+            TooltipBehavior.NEVER -> false
+            TooltipBehavior.TRUNCATED -> isTaskTruncated(task, path)
+        }
+    }
+
+    /**
+     * Checks if a task's text is truncated in the tree view.
+     */
+    private fun isTaskTruncated(task: Task, path: javax.swing.tree.TreePath?): Boolean {
+        if (path == null) return false
+
+        val row = tree.getRowForPath(path)
+        if (row < 0) return false
+
+        val rowBounds = tree.getRowBounds(row) ?: return false
+
+        // Get the renderer component to measure the actual required width
+        val node = path.lastPathComponent as? CheckedTreeNode ?: return false
+        val component = tree.cellRenderer.getTreeCellRendererComponent(
+            tree, node, false, tree.isExpanded(path), node.isLeaf, row, false
+        )
+
+        val preferredWidth = component.preferredSize.width
+
+        // Get the actual visible area for this row (accounting for tree viewport)
+        val visibleRect = tree.visibleRect
+        val treeX = rowBounds.x
+        val treeRightEdge = visibleRect.x + visibleRect.width
+
+        // Available width is from the row start to the right edge of visible area
+        val availableWidth = (treeRightEdge - treeX).coerceAtLeast(0)
+
+        // Consider it truncated if content extends beyond the visible area
+        return preferredWidth > availableWidth
     }
 }

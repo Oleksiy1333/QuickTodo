@@ -58,6 +58,14 @@
         <projectService serviceImplementation="com.oleksiy.quicktodo.service.AiConfigService"/>
         <projectService serviceImplementation="com.oleksiy.quicktodo.editor.TaskEditorMarkerService"/>
 
+        <applicationService serviceImplementation="com.oleksiy.quicktodo.settings.QuickTodoSettings"/>
+
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.oleksiy.quicktodo.settings.QuickTodoConfigurable"
+                id="com.oleksiy.quicktodo.settings.QuickTodoConfigurable"
+                displayName="QuickTodo"/>
+
         <postStartupActivity implementation="com.oleksiy.quicktodo.editor.TaskEditorMarkerStartupActivity"/>
     </extensions>
 
@@ -79,6 +87,16 @@
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift T"/>
             <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift T" replace-all="true"/>
             <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta shift T" replace-all="true"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="com.oleksiy.quicktodo.ShowRecentTasks"
+                class="com.oleksiy.quicktodo.action.ShowRecentTasksAction"
+                text="Recent Tasks"
+                description="Show recent tasks in a popup">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl F1"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta F1" replace-all="true"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta F1" replace-all="true"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

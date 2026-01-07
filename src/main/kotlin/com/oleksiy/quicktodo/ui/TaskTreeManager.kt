@@ -165,7 +165,7 @@ class TaskTreeManager(
         val path = findPathToTask(root, taskId)
         if (path != null) {
             tree.selectionPath = path
-            tree.scrollPathToVisible(path)
+            scrollPathToVisibleVerticalOnly(path)
         }
     }
 
@@ -176,8 +176,24 @@ class TaskTreeManager(
         val root = tree.model.root as? CheckedTreeNode ?: return
         val path = findPathToTask(root, taskId)
         if (path != null) {
-            tree.scrollPathToVisible(path)
+            scrollPathToVisibleVerticalOnly(path)
         }
+    }
+
+    /**
+     * Scrolls to make a path visible, but only vertically (preserves horizontal scroll position).
+     */
+    private fun scrollPathToVisibleVerticalOnly(path: TreePath) {
+        val bounds = tree.getPathBounds(path) ?: return
+        val visibleRect = tree.visibleRect
+
+        // Only scroll vertically - keep horizontal position at 0
+        tree.scrollRectToVisible(java.awt.Rectangle(
+            0,
+            bounds.y,
+            visibleRect.width,
+            bounds.height
+        ))
     }
 
     /**

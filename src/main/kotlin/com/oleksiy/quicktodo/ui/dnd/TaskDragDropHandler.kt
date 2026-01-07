@@ -96,8 +96,9 @@ class TaskDragDropHandler(
         val scrollIncrement = ChecklistConstants.AUTO_SCROLL_INCREMENT
         val newY = visibleRect.y + (autoScrollDirection * scrollIncrement)
 
+        // Preserve horizontal scroll position (x = 0) to prevent unwanted horizontal scrolling
         tree.scrollRectToVisible(Rectangle(
-            visibleRect.x,
+            0,
             newY.coerceAtLeast(0),
             visibleRect.width,
             visibleRect.height
