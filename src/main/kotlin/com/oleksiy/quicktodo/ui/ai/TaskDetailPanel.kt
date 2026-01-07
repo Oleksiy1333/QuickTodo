@@ -1,5 +1,7 @@
 package com.oleksiy.quicktodo.ui.ai
 
+import com.intellij.icons.AllIcons
+import com.intellij.ide.HelpTooltip
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
@@ -11,10 +13,12 @@ import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.ui.QuickTodoIcons
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.awt.FlowLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import javax.swing.Box
 import javax.swing.BoxLayout
+import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JSeparator
 import javax.swing.SwingConstants
@@ -182,10 +186,20 @@ class TaskDetailPanel : JPanel(CardLayout()) {
                     isOpaque = false
                     border = JBUI.Borders.emptyTop(12)
 
-                    val modeLabel = JBLabel("Execution Mode").apply {
+                    // Label row with help icon
+                    val modeLabelRow = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                        isOpaque = false
                         border = JBUI.Borders.emptyBottom(6)
+
+                        add(JBLabel("Execution Mode"))
+                        add(Box.createHorizontalStrut(JBUI.scale(4)))
+                        add(createHelpIcon(
+                            "Task Execution Mode",
+                            "Override the default mode for this specific task. " +
+                            "Choose 'Default' to use the mode selected in the dialog header."
+                        ))
                     }
-                    add(modeLabel, BorderLayout.NORTH)
+                    add(modeLabelRow, BorderLayout.NORTH)
                     add(modeComboBox, BorderLayout.CENTER)
                 }
                 add(modeContentPanel, BorderLayout.CENTER)
@@ -249,4 +263,13 @@ class TaskDetailPanel : JPanel(CardLayout()) {
     }
 
     fun getCurrentTaskId(): String? = currentTask?.id
+
+    private fun createHelpIcon(title: String, description: String): JLabel {
+        return JLabel(AllIcons.General.ContextHelp).apply {
+            HelpTooltip()
+                .setTitle(title)
+                .setDescription(description)
+                .installOn(this)
+        }
+    }
 }
