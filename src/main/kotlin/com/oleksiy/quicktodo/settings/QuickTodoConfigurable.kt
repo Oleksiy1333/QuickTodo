@@ -17,6 +17,7 @@ import javax.swing.JRadioButton
 class QuickTodoConfigurable : Configurable {
     private var settingsPanel: JPanel? = null
     private val radioButtons = mutableMapOf<TooltipBehavior, JRadioButton>()
+    private val insertionPositionButtons = mutableMapOf<TaskInsertionPosition, JRadioButton>()
     private lateinit var autoPauseCheckBox: JBCheckBox
     private lateinit var idleMinutesField: JBTextField
     private lateinit var recentTasksCountField: JBTextField
@@ -34,6 +35,15 @@ class QuickTodoConfigurable : Configurable {
             radioButton.isSelected = settings.getTooltipBehavior() == behavior
             buttonGroup.add(radioButton)
             radioButtons[behavior] = radioButton
+        }
+
+        // Create radio buttons for task insertion position
+        val insertionButtonGroup = ButtonGroup()
+        for (position in TaskInsertionPosition.entries) {
+            val radioButton = JRadioButton(position.displayName)
+            radioButton.isSelected = settings.getTaskInsertionPosition() == position
+            insertionButtonGroup.add(radioButton)
+            insertionPositionButtons[position] = radioButton
         }
 
         // Create autopause controls on one line
@@ -72,11 +82,21 @@ class QuickTodoConfigurable : Configurable {
             add(JLabel("recent tasks"))
         }
 
+        // Create panel with both insertion position radio buttons
+        val insertionPositionPanel = JPanel().apply {
+            layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0)
+            add(insertionPositionButtons[TaskInsertionPosition.TOP]!!)
+            add(insertionPositionButtons[TaskInsertionPosition.BOTTOM]!!)
+        }
+
         settingsPanel = FormBuilder.createFormBuilder()
             .addComponent(TitledSeparator("Tooltip Behavior"))
             .addComponent(radioButtons[TooltipBehavior.ALWAYS]!!, 1)
             .addComponent(radioButtons[TooltipBehavior.TRUNCATED]!!, 1)
             .addComponent(radioButtons[TooltipBehavior.NEVER]!!, 1)
+            .addVerticalGap(10)
+            .addComponent(TitledSeparator("Task List"))
+            .addLabeledComponent("Add new tasks at:", insertionPositionPanel, 1)
             .addVerticalGap(10)
             .addComponent(TitledSeparator("Time Tracking"))
             .addComponent(autoPausePanel, 0)
@@ -114,7 +134,11 @@ class QuickTodoConfigurable : Configurable {
 
         val accumulateHierarchyModified = accumulateHierarchyCheckBox.isSelected != settings.isAccumulateHierarchyTime()
 
-        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified
+        val insertionPositionModified = insertionPositionButtons.entries.any { (position, button) ->
+            button.isSelected && position != settings.getTaskInsertionPosition()
+        }
+
+        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified || insertionPositionModified
     }
 
     override fun apply() {
@@ -143,6 +167,12 @@ class QuickTodoConfigurable : Configurable {
         }
 
         settings.setAccumulateHierarchyTime(accumulateHierarchyCheckBox.isSelected)
+
+        insertionPositionButtons.forEach { (position, button) ->
+            if (button.isSelected) {
+                settings.setTaskInsertionPosition(position)
+            }
+        }
     }
 
     override fun reset() {
@@ -160,5 +190,10 @@ class QuickTodoConfigurable : Configurable {
         recentTasksCountField.text = settings.getRecentTasksCount().toString()
 
         accumulateHierarchyCheckBox.isSelected = settings.isAccumulateHierarchyTime()
+
+        val currentInsertionPosition = settings.getTaskInsertionPosition()
+        insertionPositionButtons.forEach { (position, button) ->
+            button.isSelected = position == currentInsertionPosition
+        }
     }
 }

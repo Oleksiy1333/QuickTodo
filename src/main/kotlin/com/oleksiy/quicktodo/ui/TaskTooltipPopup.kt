@@ -1,10 +1,11 @@
 package com.oleksiy.quicktodo.ui
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.JBPopup
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
-import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.service.FocusService
 import java.awt.Cursor
@@ -14,18 +15,19 @@ import javax.swing.*
 
 /**
  * Custom popup that shows task details with clickable code location link.
+ * Uses JetBrains ComponentPopupBuilder for native styling with rounded corners.
  */
 class TaskTooltipPopup(
     private val project: Project,
     private val focusService: FocusService
 ) {
-    private var currentPopup: JWindow? = null
+    private var currentPopup: JBPopup? = null
     private var hideTimer: Timer? = null
     private var isMouseOverPopup = false
 
     fun showTooltip(task: Task, mouseLocation: RelativePoint) {
         // Don't recreate if already visible
-        if (currentPopup?.isVisible == true) {
+        if (currentPopup?.isDisposed == false) {
             hideTimer?.stop()
             return
         }
@@ -34,42 +36,20 @@ class TaskTooltipPopup(
 
         val content = buildTooltipContent(task) ?: return
 
-        val window = JWindow()
-        window.isAlwaysOnTop = true
-        window.contentPane = content
+        val popup = JBPopupFactory.getInstance()
+            .createComponentPopupBuilder(content, null)
+            .setShowBorder(true)
+            .setShowShadow(true)
+            .setCancelOnClickOutside(true)
+            .setCancelOnOtherWindowOpen(true)
+            .setCancelOnWindowDeactivation(true)
+            .setRequestFocus(false)
+            .setFocusable(false)
+            .setLocateWithinScreenBounds(true)
+            .createPopup()
 
-        // Position near mouse
-        val screenPoint = mouseLocation.screenPoint
-        window.pack()
-
-        // Get the screen device where the mouse is located
-        val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-        val screenBounds = ge.screenDevices
-            .map { it.defaultConfiguration.bounds }
-            .firstOrNull { bounds ->
-                screenPoint.x >= bounds.x && screenPoint.x < bounds.x + bounds.width &&
-                screenPoint.y >= bounds.y && screenPoint.y < bounds.y + bounds.height
-            } ?: ge.defaultScreenDevice.defaultConfiguration.bounds
-
-        var x = screenPoint.x + 10
-        var y = screenPoint.y + 10
-
-        // Adjust if tooltip would go off the right edge of screen
-        if (x + window.width > screenBounds.x + screenBounds.width) {
-            x = screenBounds.x + screenBounds.width - window.width - 5
-        }
-
-        // Adjust if tooltip would go off the bottom edge of screen
-        if (y + window.height > screenBounds.y + screenBounds.height) {
-            y = screenPoint.y - window.height - 10
-        }
-
-        window.setLocation(x, y)
-        window.isVisible = true
-
-        currentPopup = window
-
-        // Don't start hide timer yet - only when mouse moves away
+        popup.show(mouseLocation)
+        currentPopup = popup
     }
 
     fun scheduleHide() {
@@ -94,7 +74,7 @@ class TaskTooltipPopup(
         hideTimer?.stop()
         hideTimer = null
         isMouseOverPopup = false
-        currentPopup?.dispose()
+        currentPopup?.cancel()
         currentPopup = null
     }
 
@@ -108,53 +88,65 @@ class TaskTooltipPopup(
     }
 
     private fun buildTooltipContent(task: Task): JPanel? {
-        val parts = mutableListOf<String>()
-
-        // Add task text
-        parts.add("<b>${escapeHtml(task.text)}</b>")
-
-        // Add completion progress for parent tasks
-        if (task.subtasks.isNotEmpty()) {
-            val (completed, total) = countCompletionProgress(task)
-            parts.add("Progress: $completed/$total")
-        }
-
-        // Add timer information
-        if (focusService.hasAccumulatedTime(task.id)) {
-            val timeStr = focusService.getFormattedTime(task.id)
-            parts.add("Time: $timeStr")
-        }
-
-        // Add priority
-        val priority = task.getPriorityEnum()
-        if (priority != Priority.NONE) {
-            parts.add("Priority: ${priority.displayName}")
-        }
-
         val panel = JPanel()
         panel.layout = BoxLayout(panel, BoxLayout.Y_AXIS)
-        panel.border = BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(JBUI.CurrentTheme.Tooltip.borderColor()),
-            JBUI.Borders.empty(8, 10)
-        )
-        panel.background = JBUI.CurrentTheme.Tooltip.background()
+        panel.isOpaque = false
+        panel.border = JBUI.Borders.empty(8, 10)
 
-        // Add info text
-        if (parts.isNotEmpty()) {
-            val infoLabel = JBLabel("<html><div style='width: 280px;'>${parts.joinToString("<br>")}</div></html>")
-            infoLabel.foreground = JBUI.CurrentTheme.Tooltip.foreground()
-            infoLabel.alignmentX = JComponent.LEFT_ALIGNMENT
-            panel.add(infoLabel)
+        // Header row: Priority icon + Task title
+        val headerPanel = JPanel()
+        headerPanel.layout = BoxLayout(headerPanel, BoxLayout.X_AXIS)
+        headerPanel.isOpaque = false
+        headerPanel.alignmentX = JComponent.LEFT_ALIGNMENT
+
+        val priority = task.getPriorityEnum()
+        val priorityIcon = QuickTodoIcons.getIconForPriority(priority)
+        if (priorityIcon != null) {
+            val iconLabel = JBLabel(priorityIcon)
+            iconLabel.border = JBUI.Borders.emptyRight(6)
+            headerPanel.add(iconLabel)
         }
 
-        // Add clickable code location link
+        val titleLabel = JBLabel("<html><b>${escapeHtml(task.text)}</b></html>")
+        headerPanel.add(titleLabel)
+        headerPanel.add(Box.createHorizontalGlue())
+        panel.add(headerPanel)
+
+        // Description section (if present)
+        if (task.hasDescription()) {
+            panel.add(Box.createVerticalStrut(6))
+            val descText = truncateDescription(task.description, 150)
+            val descLabel = JBLabel("<html><div style='width: 260px;'>${escapeHtml(descText)}</div></html>")
+            descLabel.foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND
+            descLabel.alignmentX = JComponent.LEFT_ALIGNMENT
+            panel.add(descLabel)
+        }
+
+        // Metadata row: Progress and Time
+        val metadataParts = mutableListOf<String>()
+        if (task.subtasks.isNotEmpty()) {
+            val (completed, total) = countCompletionProgress(task)
+            metadataParts.add("$completed/$total completed")
+        }
+        if (focusService.hasAccumulatedTime(task.id)) {
+            val timeStr = focusService.getFormattedTime(task.id)
+            metadataParts.add("\u23F1 $timeStr")
+        }
+
+        if (metadataParts.isNotEmpty()) {
+            panel.add(Box.createVerticalStrut(6))
+            val metadataLabel = JBLabel(metadataParts.joinToString("  \u2022  "))
+            metadataLabel.foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND
+            metadataLabel.alignmentX = JComponent.LEFT_ALIGNMENT
+            panel.add(metadataLabel)
+        }
+
+        // Code location link (clickable)
         if (task.hasCodeLocation()) {
-            if (parts.isNotEmpty()) {
-                panel.add(Box.createVerticalStrut(8))
-            }
+            panel.add(Box.createVerticalStrut(6))
 
             val location = task.codeLocation!!
-            val linkLabel = JBLabel("<html><div style='width: 280px;'><u>${escapeHtml(location.toDisplayString())}</u></div></html>")
+            val linkLabel = JBLabel("<html><u>${escapeHtml(location.toDisplayString())}</u></html>")
             linkLabel.foreground = JBUI.CurrentTheme.Link.Foreground.ENABLED
             linkLabel.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             linkLabel.alignmentX = JComponent.LEFT_ALIGNMENT
@@ -195,6 +187,15 @@ class TaskTooltipPopup(
         }
 
         return panel
+    }
+
+    private fun truncateDescription(text: String, maxLength: Int): String {
+        val cleaned = text.replace("\n", " ").replace("\r", "").trim()
+        return if (cleaned.length > maxLength) {
+            cleaned.take(maxLength).trimEnd() + "..."
+        } else {
+            cleaned
+        }
     }
 
     private fun countCompletionProgress(task: Task): Pair<Int, Int> {

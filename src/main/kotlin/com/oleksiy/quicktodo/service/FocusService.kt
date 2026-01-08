@@ -28,18 +28,20 @@ class FocusService(private val project: Project) : Disposable {
     // Autopause state
     private var lastActivityTime: Long = System.currentTimeMillis()
     private var wasAutoPaused: Boolean = false
-    private val activityListener: IdeEventQueue.EventDispatcher
+    private val activityListener: IdeEventQueue.NonLockedEventDispatcher
 
     private val taskService: TaskService
         get() = TaskService.getInstance(project)
 
     init {
         // Listen to IDE activity for autopause
-        activityListener = IdeEventQueue.EventDispatcher { event ->
-            if (event is KeyEvent || event is MouseEvent) {
-                onUserActivity()
+        activityListener = object : IdeEventQueue.NonLockedEventDispatcher {
+            override fun dispatch(e: AWTEvent): Boolean {
+                if (e is KeyEvent || e is MouseEvent) {
+                    onUserActivity()
+                }
+                return false
             }
-            false
         }
         IdeEventQueue.getInstance().addDispatcher(activityListener, this)
     }

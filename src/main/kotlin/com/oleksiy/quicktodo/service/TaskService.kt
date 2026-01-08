@@ -3,6 +3,8 @@ package com.oleksiy.quicktodo.service
 import com.oleksiy.quicktodo.model.CodeLocation
 import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.settings.QuickTodoSettings
+import com.oleksiy.quicktodo.settings.TaskInsertionPosition
 import com.oleksiy.quicktodo.undo.*
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -140,7 +142,12 @@ class TaskService : PersistentStateComponent<TaskService.State> {
 
     fun addTask(text: String, priority: Priority = Priority.NONE): Task {
         val task = Task(text = text, level = 0, priority = priority.name, createdAt = System.currentTimeMillis())
-        myState.tasks.add(task)
+        val insertAtTop = QuickTodoSettings.getInstance().getTaskInsertionPosition() == TaskInsertionPosition.TOP
+        if (insertAtTop) {
+            myState.tasks.add(0, task)
+        } else {
+            myState.tasks.add(task)
+        }
         undoRedoManager.recordCommand(AddTaskCommand(task.id, text, priority))
         notifyListeners()
         return task

@@ -20,6 +20,7 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
         var idleMinutes: Int = 5
         var recentTasksCount: Int = 10
         var accumulateHierarchyTime: Boolean = true
+        var taskInsertionPosition: TaskInsertionPosition = TaskInsertionPosition.TOP
     }
 
     private var myState = State()
@@ -58,6 +59,12 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
 
     fun setAccumulateHierarchyTime(enabled: Boolean) {
         myState.accumulateHierarchyTime = enabled
+    }
+
+    fun getTaskInsertionPosition(): TaskInsertionPosition = myState.taskInsertionPosition
+
+    fun setTaskInsertionPosition(position: TaskInsertionPosition) {
+        myState.taskInsertionPosition = position
     }
 
     companion object {

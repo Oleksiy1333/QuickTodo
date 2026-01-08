@@ -14,7 +14,7 @@ object ClaudeCodePluginChecker {
      * Set to true during development to bypass Claude Code plugin check.
      * TODO: Set to false before release.
      */
-    private const val DEV_MODE_SKIP_CHECK = true
+    private const val DEV_MODE_SKIP_CHECK = false
 
     /**
      * Checks if the Claude Code plugin is installed and enabled.
