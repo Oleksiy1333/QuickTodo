@@ -19,7 +19,7 @@ class EditTimeDialog(
     private val secondsField = JBTextField(3)
 
     init {
-        title = "Edit Time"
+        title = "Edit Focus Time"
 
         // Convert milliseconds to hours, minutes, seconds
         val totalSeconds = initialTimeMs / 1000

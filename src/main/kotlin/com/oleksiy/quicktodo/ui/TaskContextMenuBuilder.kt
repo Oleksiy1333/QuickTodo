@@ -88,8 +88,8 @@ class TaskContextMenuBuilder(
             override fun actionPerformed(e: AnActionEvent) = onEditTask(task)
         })
 
-        // Edit Time action
-        actionGroup.add(object : AnAction("Edit Time", "Edit task time", AllIcons.Actions.EditSource) {
+        // Edit Focus Time action
+        actionGroup.add(object : AnAction("Edit Focus Time", "Edit task focus time", AllIcons.Actions.EditSource) {
             override fun actionPerformed(e: AnActionEvent) {
                 val dialog = EditTimeDialog(project, task.text, task.ownTimeSpentMs)
                 if (dialog.showAndGet()) {
@@ -97,7 +97,7 @@ class TaskContextMenuBuilder(
                     if (newTimeMs != null) {
                         taskService.updateTaskOwnTime(task.id, newTimeMs)
                     } else {
-                        Messages.showErrorDialog(project, "Invalid time format", "Edit Time")
+                        Messages.showErrorDialog(project, "Invalid time format", "Edit Focus Time")
                     }
                 }
             }
