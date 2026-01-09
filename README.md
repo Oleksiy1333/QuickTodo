@@ -1,45 +1,18 @@
-<div align="center">
-  <img src="src/main/resources/icons/pluginIcon.svg" width="128" height="128" alt="QuickTodo">
-  <h1>QuickTodo</h1>
+<div style="text-align: center;">
+  <h1><img src="src/main/resources/META-INF/pluginIcon.svg" width="48" height="48" alt="QuickTodo" style="vertical-align: middle;"> QuickTodo</h1>
   <p><strong>Todo list and task management without leaving your IDE</strong></p>
 
-  <a href="https://plugins.jetbrains.com/plugin/27359-quicktodo"><img src="https://img.shields.io/jetbrains/plugin/v/27359-quicktodo?style=flat-square&label=JetBrains%20Plugin" alt="JetBrains Plugin"></a>
-  <a href="https://plugins.jetbrains.com/plugin/27359-quicktodo"><img src="https://img.shields.io/jetbrains/plugin/d/27359-quicktodo?style=flat-square&label=Downloads" alt="Downloads"></a>
-  <img src="https://img.shields.io/badge/Java-21-orange?style=flat-square" alt="Java 21">
-  <img src="https://img.shields.io/badge/Kotlin-2.2-purple?style=flat-square" alt="Kotlin">
+  <a href="https://plugins.jetbrains.com/plugin/29534-quicktodo"><img src="https://img.shields.io/jetbrains/plugin/v/29534-quicktodo?style=flat-square&label=JetBrains%20Plugin" alt="JetBrains Plugin"></a>
+  <a href="https://plugins.jetbrains.com/plugin/29534-quicktodo"><img src="https://img.shields.io/jetbrains/plugin/d/29534-quicktodo?style=flat-square&label=Downloads" alt="Downloads"></a>
   <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-Apache%202.0%20%2B%20Commons%20Clause-blue?style=flat-square" alt="License"></a>
 </div>
 
 <br>
 
-<p align="center">
+<p style="text-align: center;">
   <img src="docs/screenshots/screenshot1.JPG" width="800" alt="QuickTodo Main Interface">
   <br>
   <em>Hierarchical task management with priorities and focus timer</em>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/screenshot4.JPG" width="400" alt="Focus Timer">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot3.JPG" width="350" alt="Context Menu">
-</p>
-<p align="center">
-  <em>Focus timer tracking &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Right-click context menu</em>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/screenshot2.JPG" width="350" alt="Edit Task Dialog">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot5.JPG" width="450" alt="Recent Todos">
-</p>
-<p align="center">
-  <em>Edit task dialog &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Recent Todos popup</em>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/screenshot6.JPG" width="600" alt="Build with Claude">
-  <br>
-  <em>Build with Claude - AI-powered task automation</em>
 </p>
 
 ## Features
@@ -106,6 +79,18 @@ Available when QuickTodo panel is focused:
 
 <details>
 <summary><h2>Claude Code Integration</h2></summary>
+
+<p style="text-align: center;">
+  <img src="docs/screenshots/screenshot6.JPG" width="600" alt="Build with Claude">
+  <br>
+  <em>Build with Claude - AI-powered task automation</em>
+</p>
+
+<p style="text-align: center;">
+  <img src="docs/screenshots/screenshot3.JPG" width="350" alt="Context Menu">
+  <br>
+  <em>Right-click context menu with Plan and Implement with Claude options</em>
+</p>
 
 QuickTodo integrates with [Claude Code](https://claude.com/claude-code) to help you automate coding tasks. Select multiple tasks, configure how Claude should handle each one, and let AI work through your task list.
 
@@ -237,6 +222,6 @@ This project is licensed under the Apache License 2.0 with Commons Clause. See [
 
 ---
 
-<div align="center">
+<div style="text-align: center;">
   Made with ❤️ for JetBrains IDEs
 </div>
