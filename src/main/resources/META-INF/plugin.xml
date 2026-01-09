@@ -17,24 +17,28 @@
         <br><br>
         <b>Features:</b>
         <ul>
-            <li><b>Nested subtasks</b> with up to 3 levels of hierarchy with drag-and-drop reordering.</li>
+            <li><b>Nested subtasks</b> — Up to 3 levels of hierarchy with drag-and-drop reordering.</li>
+            <li><b>Task descriptions</b> — Add detailed notes to any task.</li>
             <li><b>Priorities</b> — Mark important tasks with priority levels.</li>
-            <li><b>Focus timer</b> — Start a timer on any task to keep focus and track how long you spend on it.</li>
-            <li><b>Per-project storage</b> — Each project maintains its own task list, stored locally in the .idea folder.</li>
-            <li><b>Link tasks to code locations</b> — Attach file and line references to tasks. Click a linked task to jump directly to the relevant code. Great for tracking TODOs, bug locations, or areas needing refactoring.</li>
+            <li><b>Focus timer</b> — Track time spent on tasks with auto-pause when IDE goes idle.</li>
+            <li><b>Daily statistics</b> — Track tasks created, completed, and total focus time.</li>
+            <li><b>Code linking</b> — Attach file and line references to tasks with gutter icons for quick navigation.</li>
+            <li><b>Build with Claude</b> — Automate coding tasks with AI using Claude Code CLI.</li>
+            <li><b>Per-project storage</b> — Each project maintains its own task list in the .idea folder.</li>
         </ul>
         <br>
         <b>Keyboard Shortcuts:</b>
         <ul>
             <li><b>Ctrl+Alt+C</b> (Cmd+Alt+C on Mac) — Open QuickTodo panel</li>
             <li><b>Ctrl+Shift+T</b> (Cmd+Shift+T on Mac) — Add a new task</li>
+            <li><b>Ctrl+F1</b> (Cmd+F1 on Mac) — Show recent tasks popup</li>
         </ul>
         <br>
         <b>Tips:</b>
         <ul>
             <li>Shortcuts can be customized in Settings → Keymap → search for "QuickTodo"</li>
             <li>Ask AI to edit <code>.idea/quicktodo.tasklist.xml</code> to quickly set up or modify tasks</li>
-            <li>"Plan with Claude" and "Implement with Claude" context menu actions are only available when the <a href="https://plugins.jetbrains.com/plugin/27310-claude-code-beta-">Claude Code</a> plugin is installed</li>
+            <li>"Build with Claude" requires the <a href="https://plugins.jetbrains.com/plugin/27310-claude-code-beta-">Claude Code</a> plugin to be installed</li>
         </ul>
     ]]></description>
 

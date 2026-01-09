@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.oleksiy"
-version = "1.0.7"
+version = "1.0.8"
 
 repositories {
     mavenCentral()
@@ -31,10 +31,26 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>New Features</h3>
             <ul>
-                <li>Added daily stats bar with task counters and focus time</li>
-                <li>New keyboard shortcuts for faster task management</li>
-                <li>Bug fixes and UI improvements</li>
+                <li>Build with Claude - AI-powered task automation via Claude Code CLI</li>
+                <li>Task descriptions - add detailed notes to any task</li>
+                <li>Copy tasks with subtasks and descriptions</li>
+                <li>Recent todos popup (Ctrl+F1) for quick navigation</li>
+                <li>Configurable tooltip behavior with smart truncation</li>
+                <li>Auto-pause focus timer when IDE goes idle</li>
+                <li>Independent task time tracking with optional hierarchy accumulation</li>
+                <li>Configure new task position (top or bottom of list)</li>
+            </ul>
+            <h3>Improvements</h3>
+            <ul>
+                <li>Improved toolbar layout and actions</li>
+                <li>Enhanced tooltip design with task information</li>
+                <li>Renamed "Edit Time" to "Edit Focus time" for clarity</li>
+            </ul>
+            <h3>Bug Fixes</h3>
+            <ul>
+                <li>Fixed drag-and-drop task reordering not working</li>
             </ul>
         """.trimIndent()
     }
