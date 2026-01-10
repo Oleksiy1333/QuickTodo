@@ -15,14 +15,17 @@ object TaskSnapshot {
         return Task(
             id = task.id,
             text = task.text,
+            descriptionLegacy = task.descriptionLegacy,
             description = task.description,
             isCompleted = task.isCompleted,
             level = task.level,
             priority = task.priority,
+            ownTimeSpentMs = task.ownTimeSpentMs,
             totalTimeSpentMs = task.totalTimeSpentMs,
             lastFocusStartedAt = task.lastFocusStartedAt,
             createdAt = task.createdAt,
             completedAt = task.completedAt,
+            lastModified = task.lastModified,
             codeLocation = task.codeLocation?.copy(),
             subtasks = task.subtasks.map { deepCopy(it) }.toMutableList()
         )

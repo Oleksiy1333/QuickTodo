@@ -55,6 +55,7 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         XmlSerializerUtil.copyBean(state, myState)
         migrateTaskTimestamps(myState.tasks)
         migrateTimeTracking(myState.tasks)
+        migrateDescriptionFormat(myState.tasks)
         // Recalculate hierarchy time after loading state
         recalculateHierarchyTime()
         undoRedoManager.clearHistory()
@@ -106,6 +107,21 @@ class TaskService : PersistentStateComponent<TaskService.State> {
                 // Already migrated or no time to migrate, just process children
                 migrateTimeTracking(task.subtasks)
             }
+        }
+    }
+
+    /**
+     * Migrates description from XML attribute format to tag format.
+     * Old format: <task description="...">
+     * New format: <task><description>...</description></task>
+     */
+    private fun migrateDescriptionFormat(tasks: List<Task>) {
+        for (task in tasks) {
+            if (task.description.isEmpty() && task.descriptionLegacy.isNotEmpty()) {
+                task.description = task.descriptionLegacy
+                task.descriptionLegacy = ""
+            }
+            migrateDescriptionFormat(task.subtasks)
         }
     }
 

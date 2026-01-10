@@ -15,6 +15,9 @@ data class Task(
     var text: String = "",
 
     @Attribute("description")
+    var descriptionLegacy: String = "",
+
+    @Tag("description")
     var description: String = "",
 
     @Attribute("completed")
@@ -61,6 +64,7 @@ data class Task(
     constructor() : this(
         UUID.randomUUID().toString(), // id
         "",                           // text
+        "",                           // descriptionLegacy
         "",                           // description
         false,                        // isCompleted
         0,                            // level
