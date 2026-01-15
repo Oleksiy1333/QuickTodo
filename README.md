@@ -98,6 +98,9 @@ QuickTodo integrates with [Claude Code](https://claude.com/claude-code) to help 
 
 1. Install the [Claude Code plugin](https://plugins.jetbrains.com/plugin/27310-claude-code-beta-)
 2. Authenticate with your Anthropic account
+3. **Enable Claude integration** in **Settings → Tools → QuickTodo → Claude Integration**
+
+> **Note**: Claude integration is disabled by default. You must enable it in settings before the Claude options appear in the toolbar and context menus.
 
 ### How It Works
 
@@ -169,6 +172,7 @@ Open **Settings → Tools → QuickTodo** to configure:
 | **Hierarchy Time** | Accumulate subtask time in parent tasks |
 | **Task Position** | Add new tasks at top or bottom of list |
 | **Recent Tasks** | Number of recent tasks to display (5-50) |
+| **Claude Integration** | Enable/disable Claude Code integration (disabled by default) |
 
 ### Data Storage
 

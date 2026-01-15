@@ -22,6 +22,7 @@ class QuickTodoConfigurable : Configurable {
     private lateinit var idleMinutesField: JBTextField
     private lateinit var recentTasksCountField: JBTextField
     private lateinit var accumulateHierarchyCheckBox: JBCheckBox
+    private lateinit var claudeIntegrationCheckBox: JBCheckBox
 
     override fun getDisplayName(): String = "QuickTodo"
 
@@ -89,6 +90,10 @@ class QuickTodoConfigurable : Configurable {
             add(insertionPositionButtons[TaskInsertionPosition.BOTTOM]!!)
         }
 
+        // Create Claude integration checkbox
+        claudeIntegrationCheckBox = JBCheckBox("Enable Claude integration")
+        claudeIntegrationCheckBox.isSelected = settings.isClaudeIntegrationEnabled()
+
         settingsPanel = FormBuilder.createFormBuilder()
             .addComponent(TitledSeparator("Tooltip Behavior"))
             .addComponent(radioButtons[TooltipBehavior.ALWAYS]!!, 1)
@@ -104,6 +109,9 @@ class QuickTodoConfigurable : Configurable {
             .addVerticalGap(10)
             .addComponent(TitledSeparator("Recent Tasks"))
             .addComponent(recentTasksPanel, 0)
+            .addVerticalGap(10)
+            .addComponent(TitledSeparator("Claude Integration"))
+            .addComponent(claudeIntegrationCheckBox, 1)
             .addComponentFillVertically(JPanel(), 0)
             .panel
 
@@ -138,7 +146,9 @@ class QuickTodoConfigurable : Configurable {
             button.isSelected && position != settings.getTaskInsertionPosition()
         }
 
-        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified || insertionPositionModified
+        val claudeIntegrationModified = claudeIntegrationCheckBox.isSelected != settings.isClaudeIntegrationEnabled()
+
+        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified || insertionPositionModified || claudeIntegrationModified
     }
 
     override fun apply() {
@@ -173,6 +183,8 @@ class QuickTodoConfigurable : Configurable {
                 settings.setTaskInsertionPosition(position)
             }
         }
+
+        settings.setClaudeIntegrationEnabled(claudeIntegrationCheckBox.isSelected)
     }
 
     override fun reset() {
@@ -195,5 +207,7 @@ class QuickTodoConfigurable : Configurable {
         insertionPositionButtons.forEach { (position, button) ->
             button.isSelected = position == currentInsertionPosition
         }
+
+        claudeIntegrationCheckBox.isSelected = settings.isClaudeIntegrationEnabled()
     }
 }

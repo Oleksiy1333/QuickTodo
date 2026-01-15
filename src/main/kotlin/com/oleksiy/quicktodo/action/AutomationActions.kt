@@ -8,6 +8,7 @@ import com.oleksiy.quicktodo.service.AiConfigService
 import com.oleksiy.quicktodo.service.AutomationService
 import com.oleksiy.quicktodo.ui.QuickTodoIcons
 import com.oleksiy.quicktodo.ui.ai.TaskSelectionDialog
+import com.oleksiy.quicktodo.settings.QuickTodoSettings
 import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
 import com.oleksiy.quicktodo.util.TerminalCommandRunner
 
@@ -50,7 +51,8 @@ class StartAutomationAction(
     override fun update(e: AnActionEvent) {
         val service = automationServiceProvider()
         val canStart = service?.canStart() == true
-        val isVisible = ClaudeCodePluginChecker.isClaudeCodeInstalled() &&
+        val isVisible = QuickTodoSettings.getInstance().isClaudeIntegrationEnabled() &&
+                ClaudeCodePluginChecker.isClaudeCodeInstalled() &&
                 TerminalCommandRunner.isTerminalAvailable()
 
         e.presentation.isEnabled = canStart

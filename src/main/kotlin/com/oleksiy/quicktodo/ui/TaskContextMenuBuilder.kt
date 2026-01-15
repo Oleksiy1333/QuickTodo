@@ -15,6 +15,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.oleksiy.quicktodo.settings.QuickTodoSettings
 import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
 import com.oleksiy.quicktodo.util.TaskTextFormatter
 import com.oleksiy.quicktodo.util.TerminalCommandRunner
@@ -103,8 +104,10 @@ class TaskContextMenuBuilder(
             }
         })
 
-        // Claude Code integration - show if Claude Code plugin is installed and Terminal is available
-        if (ClaudeCodePluginChecker.isClaudeCodeInstalled() && TerminalCommandRunner.isTerminalAvailable()) {
+        // Claude Code integration - show if enabled in settings, Claude Code plugin is installed, and Terminal is available
+        if (QuickTodoSettings.getInstance().isClaudeIntegrationEnabled() &&
+            ClaudeCodePluginChecker.isClaudeCodeInstalled() &&
+            TerminalCommandRunner.isTerminalAvailable()) {
             actionGroup.add(Separator.getInstance())
             actionGroup.add(object : AnAction(
                 "Plan with Claude",

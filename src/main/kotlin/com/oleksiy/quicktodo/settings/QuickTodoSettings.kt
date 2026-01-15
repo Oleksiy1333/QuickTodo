@@ -21,6 +21,7 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
         var recentTasksCount: Int = 10
         var accumulateHierarchyTime: Boolean = true
         var taskInsertionPosition: TaskInsertionPosition = TaskInsertionPosition.TOP
+        var claudeIntegrationEnabled: Boolean = false  // OFF by default
     }
 
     private var myState = State()
@@ -65,6 +66,12 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
 
     fun setTaskInsertionPosition(position: TaskInsertionPosition) {
         myState.taskInsertionPosition = position
+    }
+
+    fun isClaudeIntegrationEnabled(): Boolean = myState.claudeIntegrationEnabled
+
+    fun setClaudeIntegrationEnabled(enabled: Boolean) {
+        myState.claudeIntegrationEnabled = enabled
     }
 
     companion object {
