@@ -53,6 +53,9 @@ data class Task(
     @Attribute("completedAt")
     var completedAt: Long? = null,
 
+    @Attribute("plannedDate")
+    var plannedDate: String? = null,
+
     @Attribute("lastModified")
     var lastModified: Long = System.currentTimeMillis(),
 
@@ -76,6 +79,7 @@ data class Task(
         null,                         // lastAccumulatedFocusStartedAt
         null,                         // createdAt
         null,                         // completedAt
+        null,                         // plannedDate
         System.currentTimeMillis(),   // lastModified
         null,                         // codeLocation
         mutableListOf()               // subtasks

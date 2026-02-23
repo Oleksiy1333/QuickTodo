@@ -7,6 +7,8 @@ import com.oleksiy.quicktodo.action.RedoAction
 import com.oleksiy.quicktodo.action.StartAutomationAction
 import com.oleksiy.quicktodo.action.UndoAction
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.model.TaskDateGroup
+import com.oleksiy.quicktodo.model.TaskDateHelper
 import com.oleksiy.quicktodo.service.AutomationService
 import com.oleksiy.quicktodo.service.FocusService
 import com.oleksiy.quicktodo.service.TaskService
@@ -126,7 +128,8 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
             onMoveUp = { moveSelectedTask(-1) },
             onMoveDown = { moveSelectedTask(1) },
             canMoveUp = { canMoveSelectedTask(-1) },
-            canMoveDown = { canMoveSelectedTask(1) }
+            canMoveDown = { canMoveSelectedTask(1) },
+            onTogglePlanForToday = { togglePlanForToday() }
         )
         editTaskHandler = EditTaskHandler(
             project,
@@ -625,6 +628,19 @@ class ChecklistPanel(private val project: Project) : ChecklistActionCallback, Di
 
     override fun toggleHideCompleted() {
         taskService.setHideCompleted(!taskService.isHideCompleted())
+    }
+
+    private fun togglePlanForToday() {
+        val task = getSelectedTask() ?: return
+        val settings = QuickTodoSettings.getInstance()
+        val rolloverHour = settings.getDayRolloverHour()
+        val group = TaskDateHelper.classifyTask(task, rolloverHour)
+
+        when (group) {
+            TaskDateGroup.NONE -> taskService.planTaskForToday(task.id, rolloverHour)
+            TaskDateGroup.TODAY -> taskService.clearTaskPlannedDate(task.id)
+            TaskDateGroup.OVERDUE -> taskService.planTaskForToday(task.id, rolloverHour)
+        }
     }
 
     // ============ Lifecycle ============

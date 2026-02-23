@@ -15,6 +15,8 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.oleksiy.quicktodo.model.TaskDateGroup
+import com.oleksiy.quicktodo.model.TaskDateHelper
 import com.oleksiy.quicktodo.settings.QuickTodoSettings
 import com.oleksiy.quicktodo.util.ClaudeCodePluginChecker
 import com.oleksiy.quicktodo.util.TaskTextFormatter
@@ -76,6 +78,62 @@ class TaskContextMenuBuilder(
 
         actionGroup.add(priorityGroup)
         actionGroup.add(Separator.getInstance())
+
+        // Plan for Today actions
+        val settings = QuickTodoSettings.getInstance()
+        val rolloverHour = settings.getDayRolloverHour()
+        val dateGroup = TaskDateHelper.classifyTask(task, rolloverHour)
+
+        when (dateGroup) {
+            TaskDateGroup.NONE -> {
+                // Task is not planned — offer to plan for today
+                if (!task.isCompleted) {
+                    actionGroup.add(object : AnAction(
+                        "Plan for Today",
+                        "Mark this task as planned for today",
+                        null
+                    ) {
+                        override fun actionPerformed(e: AnActionEvent) {
+                            taskService.planTaskForToday(task.id, rolloverHour)
+                        }
+                    })
+                    actionGroup.add(Separator.getInstance())
+                }
+            }
+            TaskDateGroup.OVERDUE -> {
+                actionGroup.add(object : AnAction(
+                    "Move to Today",
+                    "Update plan to today",
+                    null
+                ) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        taskService.planTaskForToday(task.id, rolloverHour)
+                    }
+                })
+                actionGroup.add(object : AnAction(
+                    "Remove Plan",
+                    "Remove planned date from this task",
+                    null
+                ) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        taskService.clearTaskPlannedDate(task.id)
+                    }
+                })
+                actionGroup.add(Separator.getInstance())
+            }
+            TaskDateGroup.TODAY -> {
+                actionGroup.add(object : AnAction(
+                    "Remove from Today",
+                    "Remove planned date from this task",
+                    null
+                ) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        taskService.clearTaskPlannedDate(task.id)
+                    }
+                })
+                actionGroup.add(Separator.getInstance())
+            }
+        }
 
         // Add Subtask action (only if nesting level allows)
         if (task.canAddSubtask()) {

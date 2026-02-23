@@ -23,7 +23,8 @@ class ChecklistKeyboardHandler(
     private val onMoveUp: () -> Unit,
     private val onMoveDown: () -> Unit,
     private val canMoveUp: () -> Boolean,
-    private val canMoveDown: () -> Boolean
+    private val canMoveDown: () -> Boolean,
+    private val onTogglePlanForToday: () -> Unit = {}
 ) {
     /**
      * Sets up keyboard shortcuts on the tree.
@@ -74,6 +75,12 @@ class ChecklistKeyboardHandler(
             }
         }
 
+        val togglePlanForTodayAction = object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent?) {
+                onTogglePlanForToday()
+            }
+        }
+
         // Define move keystrokes
         val moveUpCtrl = KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.CTRL_DOWN_MASK)
         val moveUpMeta = KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.META_DOWN_MASK)
@@ -112,6 +119,9 @@ class ChecklistKeyboardHandler(
             // Move down: Ctrl+Down (Windows/Linux) or Cmd+Down (macOS)
             put(moveDownCtrl, "moveTaskDown")
             put(moveDownMeta, "moveTaskDown")
+            // Plan for today: Ctrl+Shift+D (Windows/Linux) or Cmd+Shift+D (macOS)
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_D, KeyEvent.CTRL_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "togglePlanForToday")
+            put(KeyStroke.getKeyStroke(KeyEvent.VK_D, KeyEvent.META_DOWN_MASK or KeyEvent.SHIFT_DOWN_MASK), "togglePlanForToday")
         }
 
         tree.actionMap.apply {
@@ -122,6 +132,7 @@ class ChecklistKeyboardHandler(
             put("addTask", addTaskAction)
             put("moveTaskUp", moveUpAction)
             put("moveTaskDown", moveDownAction)
+            put("togglePlanForToday", togglePlanForTodayAction)
         }
     }
 }

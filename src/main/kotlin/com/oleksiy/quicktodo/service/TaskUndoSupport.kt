@@ -91,6 +91,13 @@ internal class TaskUndoSupport(
         return true
     }
 
+    override fun setTaskPlannedDateWithoutUndo(taskId: String, date: String?): Boolean {
+        val task = tasks.findTaskById(taskId) ?: return false
+        task.plannedDate = date
+        notifyListeners()
+        return true
+    }
+
     override fun moveTaskWithoutUndo(
         taskId: String,
         targetParentId: String?,

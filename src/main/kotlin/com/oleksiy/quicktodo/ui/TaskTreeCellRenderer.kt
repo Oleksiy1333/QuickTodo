@@ -74,7 +74,24 @@ class TaskTreeCellRenderer(
         iconWidth = 0
 
         val node = value as? CheckedTreeNode
+        val groupData = node?.userObject as? GroupHeaderData
         val task = node?.userObject as? Task
+
+        if (groupData != null) {
+            // Group header node (Today, Overdue)
+            checkbox.isVisible = false
+            background = null
+            isOpaque = false
+            textRenderer.append(
+                groupData.displayName,
+                SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, null)
+            )
+            textRenderer.append(
+                "  ${groupData.taskCount}",
+                SimpleTextAttributes.GRAYED_ATTRIBUTES
+            )
+            return this
+        }
 
         if (task == null) {
             // Root node or non-task node

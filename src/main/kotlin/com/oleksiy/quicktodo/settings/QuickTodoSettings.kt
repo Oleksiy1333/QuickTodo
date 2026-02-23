@@ -22,6 +22,7 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
         var accumulateHierarchyTime: Boolean = true
         var taskInsertionPosition: TaskInsertionPosition = TaskInsertionPosition.TOP
         var claudeIntegrationEnabled: Boolean = false  // OFF by default
+        var dayRolloverHour: Int = 3  // 0 or 3; default 03:00
     }
 
     private var myState = State()
@@ -72,6 +73,12 @@ class QuickTodoSettings : PersistentStateComponent<QuickTodoSettings.State> {
 
     fun setClaudeIntegrationEnabled(enabled: Boolean) {
         myState.claudeIntegrationEnabled = enabled
+    }
+
+    fun getDayRolloverHour(): Int = myState.dayRolloverHour
+
+    fun setDayRolloverHour(hour: Int) {
+        myState.dayRolloverHour = if (hour == 0) 0 else 3
     }
 
     companion object {

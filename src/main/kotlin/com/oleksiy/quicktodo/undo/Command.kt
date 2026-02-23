@@ -260,6 +260,50 @@ data class ClearCompletedTasksCommand(
 }
 
 /**
+ * Command for setting or clearing task planned date.
+ */
+data class SetPlannedDateCommand(
+    val taskId: String,
+    val oldDate: String?,
+    val newDate: String?
+) : Command {
+    override val description: String
+        get() = when {
+            oldDate == null && newDate != null -> "Plan for today"
+            oldDate != null && newDate == null -> "Remove plan"
+            else -> "Update plan"
+        }
+
+    override fun undo(executor: CommandExecutor) {
+        executor.setTaskPlannedDateWithoutUndo(taskId, oldDate)
+    }
+
+    override fun redo(executor: CommandExecutor) {
+        executor.setTaskPlannedDateWithoutUndo(taskId, newDate)
+    }
+}
+
+/**
+ * Command for cascading planned date to a task and all its descendants.
+ * Used when planning a parent task for today — all subtasks get the same date.
+ */
+data class SetPlannedDateCascadeCommand(
+    val oldDates: Map<String, String?>,
+    val newDate: String?
+) : Command {
+    override val description: String
+        get() = "Plan for today"
+
+    override fun undo(executor: CommandExecutor) {
+        oldDates.forEach { (id, oldDate) -> executor.setTaskPlannedDateWithoutUndo(id, oldDate) }
+    }
+
+    override fun redo(executor: CommandExecutor) {
+        oldDates.keys.forEach { id -> executor.setTaskPlannedDateWithoutUndo(id, newDate) }
+    }
+}
+
+/**
  * Command for setting or clearing task code location.
  */
 data class SetTaskLocationCommand(

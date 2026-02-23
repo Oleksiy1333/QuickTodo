@@ -5,6 +5,7 @@ import com.oleksiy.quicktodo.model.Priority
 import com.oleksiy.quicktodo.model.Task
 import com.oleksiy.quicktodo.settings.QuickTodoSettings
 import com.oleksiy.quicktodo.settings.TaskInsertionPosition
+import com.oleksiy.quicktodo.model.TaskDateHelper
 import com.oleksiy.quicktodo.undo.*
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -344,6 +345,46 @@ class TaskService : PersistentStateComponent<TaskService.State> {
         }
 
         return result
+    }
+
+    fun setTaskPlannedDate(taskId: String, date: String?): Boolean {
+        val task = findTask(taskId) ?: return false
+        val oldDate = task.plannedDate
+
+        if (oldDate == date) return true
+
+        task.plannedDate = date
+        task.lastModified = System.currentTimeMillis()
+        undoRedoManager.recordCommand(SetPlannedDateCommand(taskId, oldDate, date))
+        notifyListeners()
+        return true
+    }
+
+    fun clearTaskPlannedDate(taskId: String): Boolean = setTaskPlannedDate(taskId, null)
+
+    fun planTaskForToday(taskId: String, rolloverHour: Int): Boolean {
+        val task = findTask(taskId) ?: return false
+        val today = TaskDateHelper.resolveToday(rolloverHour)
+
+        // Collect old dates for undo (this task + all descendants)
+        val oldDates = mutableMapOf<String, String?>()
+        fun collectOldDates(t: Task) {
+            oldDates[t.id] = t.plannedDate
+            t.subtasks.forEach { collectOldDates(it) }
+        }
+        collectOldDates(task)
+
+        // Apply new date to all
+        fun applyDate(t: Task) {
+            t.plannedDate = today
+            t.lastModified = System.currentTimeMillis()
+            t.subtasks.forEach { applyDate(it) }
+        }
+        applyDate(task)
+
+        undoRedoManager.recordCommand(SetPlannedDateCascadeCommand(oldDates, today))
+        notifyListeners()
+        return true
     }
 
     fun clearCompletedTasks(): Int {

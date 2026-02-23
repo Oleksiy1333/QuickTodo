@@ -1,7 +1,10 @@
 package com.oleksiy.quicktodo.ui
 
 import com.oleksiy.quicktodo.model.Task
+import com.oleksiy.quicktodo.model.TaskDateGroup
+import com.oleksiy.quicktodo.model.TaskDateHelper
 import com.oleksiy.quicktodo.service.TaskService
+import com.oleksiy.quicktodo.settings.QuickTodoSettings
 import com.intellij.ui.CheckedTreeNode
 import javax.swing.JTree
 import javax.swing.tree.DefaultTreeModel
@@ -9,6 +12,7 @@ import javax.swing.tree.TreePath
 
 /**
  * Manages tree state including node creation, expansion state, and task selection.
+ * Supports grouping tasks into Overdue/Today/Regular sections based on plannedDate.
  */
 class TaskTreeManager(
     private val tree: JTree,
@@ -16,34 +20,66 @@ class TaskTreeManager(
 ) {
     private var isRefreshing = false
 
-    /**
-     * Returns true if the tree is currently being refreshed.
-     * Used to suppress expansion state saving during programmatic changes.
-     */
     fun isRefreshing(): Boolean = isRefreshing
 
     /**
      * Refreshes the tree with current tasks, preserving expansion and selection state.
+     * Groups tasks into Overdue/Today/Regular sections when planned dates exist.
      */
     fun refreshTree() {
         isRefreshing = true
         try {
-            val expandedTaskIds = getExpandedTaskIdsFromTree() + taskService.getExpandedTaskIds()
+            val expandedIds = getExpandedIdsFromTree() + taskService.getExpandedTaskIds()
             val selectedTaskId = getSelectedTaskId()
 
             val tasks = taskService.getTasks()
             val hideCompleted = taskService.isHideCompleted()
+            val rolloverHour = QuickTodoSettings.getInstance().getDayRolloverHour()
             val rootNode = CheckedTreeNode("Tasks")
 
-            tasks.forEach { task ->
-                val node = createTaskNode(task, hideCompleted)
-                if (node != null) {
-                    rootNode.add(node)
+            // Classify root tasks into groups
+            val overdueRoots = mutableListOf<Task>()
+            val todayRoots = mutableListOf<Task>()
+            val regularRoots = mutableListOf<Task>()
+
+            for (task in tasks) {
+                val group = classifyRootTask(task, rolloverHour)
+                when (group) {
+                    TaskDateGroup.OVERDUE -> overdueRoots.add(task)
+                    TaskDateGroup.TODAY -> todayRoots.add(task)
+                    TaskDateGroup.NONE -> regularRoots.add(task)
+                }
+            }
+
+            // Collect subtasks that should be extracted to a different group than their root
+            val extracted = collectExtractedSubtasks(tasks, rolloverHour)
+
+            val hasGroups = overdueRoots.isNotEmpty() || todayRoots.isNotEmpty() ||
+                extracted.overdue.isNotEmpty() || extracted.today.isNotEmpty()
+
+            if (hasGroups) {
+                // Merge extracted subtasks into group lists
+                val allOverdue = overdueRoots + extracted.overdue
+                val allToday = todayRoots + extracted.today
+
+                // Build grouped tree: Overdue -> Today -> Regular
+                addGroupIfNotEmpty(rootNode, TaskDateGroup.OVERDUE, allOverdue, hideCompleted, extracted.extractedIds)
+                addGroupIfNotEmpty(rootNode, TaskDateGroup.TODAY, allToday, hideCompleted, extracted.extractedIds)
+
+                // Regular tasks also get a group header for clear separation
+                addGroupIfNotEmpty(rootNode, TaskDateGroup.NONE, regularRoots, hideCompleted, extracted.extractedIds)
+            } else {
+                // No planned tasks — flat tree as before
+                for (task in tasks) {
+                    val node = createTaskNode(task, hideCompleted)
+                    if (node != null) {
+                        rootNode.add(node)
+                    }
                 }
             }
 
             tree.model = DefaultTreeModel(rootNode)
-            restoreExpandedState(expandedTaskIds)
+            restoreExpandedState(expandedIds)
 
             if (selectedTaskId != null) {
                 selectTaskById(selectedTaskId)
@@ -54,33 +90,93 @@ class TaskTreeManager(
     }
 
     /**
-     * Gets the currently selected task's ID, or null if no task is selected.
+     * Classifies a root-level task into a date group based on its own planned date only.
+     * Subtask planned dates do not affect the parent's group.
      */
+    private fun classifyRootTask(task: Task, rolloverHour: Int): TaskDateGroup {
+        return TaskDateHelper.classifyTask(task, rolloverHour)
+    }
+
+    private data class ExtractedSubtasks(
+        val overdue: List<Task>,
+        val today: List<Task>,
+        val extractedIds: Set<String>
+    )
+
+    /**
+     * Collects subtasks whose date group differs from their root ancestor's group.
+     * These subtasks will be extracted and shown as standalone items in the appropriate group.
+     * Subtasks in the same group as their root stay nested (no extraction needed).
+     */
+    private fun collectExtractedSubtasks(tasks: List<Task>, rolloverHour: Int): ExtractedSubtasks {
+        val overdue = mutableListOf<Task>()
+        val today = mutableListOf<Task>()
+        val ids = mutableSetOf<String>()
+
+        fun scan(subtasks: List<Task>, rootGroup: TaskDateGroup) {
+            for (s in subtasks) {
+                val group = TaskDateHelper.classifyTask(s, rolloverHour)
+                if (group != TaskDateGroup.NONE && group != rootGroup) {
+                    when (group) {
+                        TaskDateGroup.OVERDUE -> overdue.add(s)
+                        TaskDateGroup.TODAY -> today.add(s)
+                        else -> {}
+                    }
+                    ids.add(s.id)
+                }
+                scan(s.subtasks, rootGroup)
+            }
+        }
+
+        tasks.forEach { task ->
+            val rootGroup = classifyRootTask(task, rolloverHour)
+            scan(task.subtasks, rootGroup)
+        }
+        return ExtractedSubtasks(overdue, today, ids)
+    }
+
+    /**
+     * Adds a group header with its tasks to the root node.
+     * Counts only visible root-level tasks for the header counter.
+     */
+    private fun addGroupIfNotEmpty(
+        rootNode: CheckedTreeNode,
+        group: TaskDateGroup,
+        tasks: List<Task>,
+        hideCompleted: Boolean,
+        extractedIds: Set<String> = emptySet()
+    ) {
+        val visibleNodes = tasks.mapNotNull { createTaskNode(it, hideCompleted, extractedIds) }
+        if (visibleNodes.isEmpty()) return
+
+        val groupHeader = GroupHeaderNode(group, visibleNodes.size)
+        for (node in visibleNodes) {
+            groupHeader.add(node)
+        }
+        rootNode.add(groupHeader)
+    }
+
     private fun getSelectedTaskId(): String? {
         val node = tree.lastSelectedPathComponent as? CheckedTreeNode
         return (node?.userObject as? Task)?.id
     }
 
-    /**
-     * Checks if a task has any incomplete descendants (subtasks, sub-subtasks, etc.).
-     */
     private fun hasIncompleteDescendants(task: Task): Boolean =
         task.subtasks.any { !it.isCompleted || hasIncompleteDescendants(it) }
 
-    /**
-     * Creates a tree node for a task and its subtasks recursively.
-     * Returns null if the task should be hidden (completed when hideCompleted is true
-     * and has no incomplete descendants).
-     */
-    private fun createTaskNode(task: Task, hideCompleted: Boolean): CheckedTreeNode? {
-        // Only hide completed tasks if they have no incomplete descendants
+    private fun createTaskNode(
+        task: Task,
+        hideCompleted: Boolean,
+        extractedIds: Set<String> = emptySet()
+    ): CheckedTreeNode? {
         if (hideCompleted && task.isCompleted && !hasIncompleteDescendants(task)) {
             return null
         }
         val node = CheckedTreeNode(task)
         node.isChecked = task.isCompleted
         task.subtasks.forEach { subtask ->
-            val subtaskNode = createTaskNode(subtask, hideCompleted)
+            if (subtask.id in extractedIds) return@forEach
+            val subtaskNode = createTaskNode(subtask, hideCompleted, extractedIds)
             if (subtaskNode != null) {
                 node.add(subtaskNode)
             }
@@ -88,9 +184,6 @@ class TaskTreeManager(
         return node
     }
 
-    /**
-     * Expands all nodes in the tree.
-     */
     fun expandAll() {
         val root = tree.model.root as? CheckedTreeNode ?: return
         traverseNodes(root) { node ->
@@ -98,9 +191,6 @@ class TaskTreeManager(
         }
     }
 
-    /**
-     * Collapses all nodes except the root.
-     */
     fun collapseAll() {
         val root = tree.model.root as? CheckedTreeNode ?: return
         traverseNodesPostOrder(root) { node ->
@@ -110,56 +200,69 @@ class TaskTreeManager(
         }
     }
 
-    /**
-     * Saves the current expansion state to TaskService.
-     */
     fun saveExpandedState() {
-        val expandedIds = getExpandedTaskIdsFromTree()
+        val expandedIds = getExpandedIdsFromTree()
         taskService.setExpandedTaskIds(expandedIds)
     }
 
     /**
-     * Gets all expanded task IDs from the current tree state.
+     * Gets all expanded IDs from the current tree state.
+     * Includes both task IDs and group header IDs.
      */
-    fun getExpandedTaskIdsFromTree(): Set<String> {
+    fun getExpandedIdsFromTree(): Set<String> {
         val expandedIds = mutableSetOf<String>()
         val root = tree.model.root as? CheckedTreeNode ?: return expandedIds
 
         traverseNodes(root) { node ->
-            val task = node.userObject as? Task
-            if (task != null && tree.isExpanded(TreePath(node.path))) {
-                expandedIds.add(task.id)
+            if (tree.isExpanded(TreePath(node.path))) {
+                when (node) {
+                    is GroupHeaderNode -> expandedIds.add(node.groupId)
+                    else -> {
+                        val task = node.userObject as? Task
+                        if (task != null) expandedIds.add(task.id)
+                    }
+                }
             }
         }
         return expandedIds
     }
 
     /**
-     * Restores expansion state from a set of task IDs.
+     * For backward compatibility — delegates to getExpandedIdsFromTree.
      */
-    fun restoreExpandedState(expandedTaskIds: Set<String>) {
+    fun getExpandedTaskIdsFromTree(): Set<String> = getExpandedIdsFromTree()
+
+    /**
+     * Restores expansion state from a set of IDs (task IDs and group header IDs).
+     */
+    fun restoreExpandedState(expandedIds: Set<String>) {
         val root = tree.model.root as? CheckedTreeNode ?: return
 
         traverseNodes(root) { node ->
-            val task = node.userObject as? Task
-            if (task != null && task.id in expandedTaskIds) {
-                tree.expandPath(TreePath(node.path))
+            when (node) {
+                is GroupHeaderNode -> {
+                    // Group headers are expanded by default if not explicitly in the set
+                    // or if they are in the set
+                    if (node.groupId in expandedIds || !expandedIds.contains(node.groupId)) {
+                        tree.expandPath(TreePath(node.path))
+                    }
+                }
+                else -> {
+                    val task = node.userObject as? Task
+                    if (task != null && task.id in expandedIds) {
+                        tree.expandPath(TreePath(node.path))
+                    }
+                }
             }
         }
     }
 
-    /**
-     * Ensures a specific task is expanded (useful when adding subtasks).
-     */
     fun ensureTaskExpanded(taskId: String) {
         val expandedIds = taskService.getExpandedTaskIds().toMutableSet()
         expandedIds.add(taskId)
         taskService.setExpandedTaskIds(expandedIds)
     }
 
-    /**
-     * Selects a task by ID and scrolls to make it visible.
-     */
     fun selectTaskById(taskId: String) {
         val root = tree.model.root as? CheckedTreeNode ?: return
         val path = findPathToTask(root, taskId)
@@ -169,9 +272,6 @@ class TaskTreeManager(
         }
     }
 
-    /**
-     * Scrolls to make a task visible without changing selection.
-     */
     fun scrollToTaskById(taskId: String) {
         val root = tree.model.root as? CheckedTreeNode ?: return
         val path = findPathToTask(root, taskId)
@@ -180,14 +280,10 @@ class TaskTreeManager(
         }
     }
 
-    /**
-     * Scrolls to make a path visible, but only vertically (preserves horizontal scroll position).
-     */
     private fun scrollPathToVisibleVerticalOnly(path: TreePath) {
         val bounds = tree.getPathBounds(path) ?: return
         val visibleRect = tree.visibleRect
 
-        // Only scroll vertically - keep horizontal position at 0
         tree.scrollRectToVisible(java.awt.Rectangle(
             0,
             bounds.y,
@@ -196,9 +292,6 @@ class TaskTreeManager(
         ))
     }
 
-    /**
-     * Finds the TreePath to a task by its ID.
-     */
     fun findPathToTask(node: CheckedTreeNode, taskId: String): TreePath? {
         val task = node.userObject as? Task
         if (task?.id == taskId) {
@@ -214,9 +307,6 @@ class TaskTreeManager(
 
     // =============== Generic Tree Traversal Utilities ===============
 
-    /**
-     * Traverses all nodes in pre-order (parent before children).
-     */
     private fun traverseNodes(node: CheckedTreeNode, action: (CheckedTreeNode) -> Unit) {
         action(node)
         for (i in 0 until node.childCount) {
@@ -225,10 +315,6 @@ class TaskTreeManager(
         }
     }
 
-    /**
-     * Traverses all nodes in post-order (children before parent).
-     * Useful for collapse operations where children must be collapsed first.
-     */
     private fun traverseNodesPostOrder(node: CheckedTreeNode, action: (CheckedTreeNode) -> Unit) {
         for (i in 0 until node.childCount) {
             val child = node.getChildAt(i) as? CheckedTreeNode ?: continue

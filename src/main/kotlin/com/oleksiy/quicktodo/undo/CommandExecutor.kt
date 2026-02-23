@@ -22,6 +22,7 @@ interface CommandExecutor {
     fun setTaskCompletionWithoutUndo(taskId: String, completed: Boolean): Boolean
     fun setTaskPriorityWithoutUndo(taskId: String, priority: Priority): Boolean
     fun setTaskLocationWithoutUndo(taskId: String, location: CodeLocation?): Boolean
+    fun setTaskPlannedDateWithoutUndo(taskId: String, date: String?): Boolean
 
     // Task movement without undo registration
     fun moveTaskWithoutUndo(taskId: String, targetParentId: String?, targetIndex: Int): Boolean

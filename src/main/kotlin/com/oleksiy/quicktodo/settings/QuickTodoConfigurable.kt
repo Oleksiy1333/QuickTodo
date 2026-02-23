@@ -23,6 +23,8 @@ class QuickTodoConfigurable : Configurable {
     private lateinit var recentTasksCountField: JBTextField
     private lateinit var accumulateHierarchyCheckBox: JBCheckBox
     private lateinit var claudeIntegrationCheckBox: JBCheckBox
+    private lateinit var rolloverMidnightRadio: JRadioButton
+    private lateinit var rollover3amRadio: JRadioButton
 
     override fun getDisplayName(): String = "QuickTodo"
 
@@ -94,6 +96,24 @@ class QuickTodoConfigurable : Configurable {
         claudeIntegrationCheckBox = JBCheckBox("Enable Claude integration")
         claudeIntegrationCheckBox.isSelected = settings.isClaudeIntegrationEnabled()
 
+        // Create day rollover radio buttons
+        val rolloverButtonGroup = ButtonGroup()
+        rolloverMidnightRadio = JRadioButton("00:00 (midnight)")
+        rollover3amRadio = JRadioButton("03:00 (default)")
+        rolloverButtonGroup.add(rolloverMidnightRadio)
+        rolloverButtonGroup.add(rollover3amRadio)
+        if (settings.getDayRolloverHour() == 0) {
+            rolloverMidnightRadio.isSelected = true
+        } else {
+            rollover3amRadio.isSelected = true
+        }
+
+        val rolloverPanel = JPanel().apply {
+            layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0)
+            add(rolloverMidnightRadio)
+            add(rollover3amRadio)
+        }
+
         settingsPanel = FormBuilder.createFormBuilder()
             .addComponent(TitledSeparator("Tooltip Behavior"))
             .addComponent(radioButtons[TooltipBehavior.ALWAYS]!!, 1)
@@ -109,6 +129,9 @@ class QuickTodoConfigurable : Configurable {
             .addVerticalGap(10)
             .addComponent(TitledSeparator("Recent Tasks"))
             .addComponent(recentTasksPanel, 0)
+            .addVerticalGap(10)
+            .addComponent(TitledSeparator("Day Planning"))
+            .addLabeledComponent("Day rollover time:", rolloverPanel, 1)
             .addVerticalGap(10)
             .addComponent(TitledSeparator("Claude Integration"))
             .addComponent(claudeIntegrationCheckBox, 1)
@@ -148,7 +171,9 @@ class QuickTodoConfigurable : Configurable {
 
         val claudeIntegrationModified = claudeIntegrationCheckBox.isSelected != settings.isClaudeIntegrationEnabled()
 
-        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified || insertionPositionModified || claudeIntegrationModified
+        val rolloverModified = getSelectedRolloverHour() != settings.getDayRolloverHour()
+
+        return tooltipModified || autoPauseModified || idleMinutesModified || recentTasksCountModified || accumulateHierarchyModified || insertionPositionModified || claudeIntegrationModified || rolloverModified
     }
 
     override fun apply() {
@@ -185,6 +210,8 @@ class QuickTodoConfigurable : Configurable {
         }
 
         settings.setClaudeIntegrationEnabled(claudeIntegrationCheckBox.isSelected)
+
+        settings.setDayRolloverHour(getSelectedRolloverHour())
     }
 
     override fun reset() {
@@ -209,5 +236,13 @@ class QuickTodoConfigurable : Configurable {
         }
 
         claudeIntegrationCheckBox.isSelected = settings.isClaudeIntegrationEnabled()
+
+        val currentRollover = settings.getDayRolloverHour()
+        rolloverMidnightRadio.isSelected = currentRollover == 0
+        rollover3amRadio.isSelected = currentRollover != 0
+    }
+
+    private fun getSelectedRolloverHour(): Int {
+        return if (rolloverMidnightRadio.isSelected) 0 else 3
     }
 }
