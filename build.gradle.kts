@@ -1,7 +1,7 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.2.21"
-    id("org.jetbrains.intellij.platform") version "2.10.5"
+    id("org.jetbrains.kotlin.jvm") version "2.3.10"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = "com.oleksiy"
@@ -16,7 +16,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        create("IU", "2025.3.1")
+        create("IU", "2026.1.4")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Terminal plugin for Claude Code integration
@@ -44,7 +44,7 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            recommended()
+            create("IU", "2026.1.4")
         }
     }
 }
