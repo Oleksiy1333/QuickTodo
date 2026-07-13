@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.oleksiy"
-version = "1.0.10"
+version = "1.0.11"
 
 repositories {
     mavenCentral()
@@ -33,11 +33,7 @@ intellijPlatform {
         changeNotes = """
             <h3>New Features</h3>
             <ul>
-                <li>Added Speed Search – Ctrl+F (Command+F)</li>
-            </ul>
-            <h3>Improvements</h3>
-            <ul>
-                <li>Visual UI improvements</li>
+                <li>Added possibility to add tasks directly in "Planned for Today"</li>
             </ul>
         """.trimIndent()
     }
