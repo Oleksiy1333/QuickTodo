@@ -35,7 +35,7 @@
 3. Search for **"QuickTodo"**
 4. Click **Install** and restart the IDE
 
-Or install directly from [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/27359-quicktodo)
+Or install directly from [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/29534-quicktodo)
 
 ## Quick Start
 
